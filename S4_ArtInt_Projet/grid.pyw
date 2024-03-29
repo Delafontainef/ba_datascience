@@ -205,7 +205,8 @@ class Draw:
         if not event.widget == self.c:              # canvas only
             return
         w,h = event.width,event.height              # new canvas size
-        dw,dh = w//self.x if self.x > 0 else 0,h//self.y if self.y > 0 else 0
+        dw = w//(self.x)*0.92 if self.x > 0 else 0
+        dh = h//(self.y)*0.92 if self.y > 0 else 0
         ch_w = True if dw < dh else False           # new cell size
         if (ch_w and dw > 80) or (dh > 80):
             self.sz = 80
