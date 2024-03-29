@@ -17,17 +17,17 @@ Fournit une interface de type 'grille' (matrice n*n) via tkinter.
 2. Modifier la grille
     Clic-gauche et clic-droit sur les cases pour changer leur couleur.
 3. Sauvegarder/charger
-    "Ctrl+s" pour sauvegarder,
-    "Ctrl+Alt+s" pour sauvegarder sous (nouveau nom de fichier),
-    "Ctrl+o" pour charger un fichier.
+    Avec le menu ou les raccourcis-clavier suivants : 
+    "Ctrl+n" pour créer une nouvelle grille.
+    "Ctrl+o" pour ouvrir un fichier.
+    "Ctrl+s" pour sauvegarder la grille.
+    "Ctrl+Alt+s" pour sauvegarder dans un nouveau fichier.
     
-Note : 
-    L'éditeur ne permet pas encore de créer une nouvelle grille.
-    L'éditeur ne permet pas de modifier la taille de la grille ou 
-        le dictionnaire de couleurs. Pour cela, il faut modifier 
-        manuellement le '.json' (clés 'colors' et 'size').
+Note : L'éditeur ne permet pas de modifier la taille de la grille ou 
+       le dictionnaire de couleurs. Pour cela, il faut modifier 
+       manuellement le '.json' (clés 'colors' et 'size').
 
-#### 28.03.2024
+#### 29.03.2024
 
 Modifié 'Cell', 'Draw' et ajouté la classe 'Editor'.
 
@@ -48,9 +48,8 @@ La classe 'Editor' se contente d'ajouter les appels souris/clavier.
     - ctrl+s :      sauvegarde la grille dans le json.
     - ctrl+alt+s :  sauvegarde en demandant un nom de fichier.
     - ctrl+o :      charge un fichier json (en demandant le nom du fichier).
-    
-Note : L'éditeur ne permet pas encore de créer une nouvelle grille de rien.
-Note : L'éditeur n'a pas de menu dédié pour charger/sauvegarder, etc.
+    - ctrl+n :      crée une nouvelle grille.
+
 Note : Le dictionnaire de couleurs doit être modifié manuellement 
        dans le json ('draw'>'colors').
 
