@@ -301,10 +301,18 @@ class Editor:
         self.d.save(f)                  # let 'Draw' handle it
     def bind(self):
         """Add mouse controls."""
-        self.d.c.bind("<Button-1>",self.next_col)
-        self.w.bind("<Control-s>",self.save)
+        self.d.c.bind("<Button-1>",self.next_col)   # left-clic
+        self.d.c.bind("<Button-3>",self.prev_col)   # right-clic
+        self.w.bind("<Control-s>",self.save)        # Ctrl+s
+    def prev_col(self,e):
+        """Changes the cell's color id (previous)."""
+        c = self.d.get_cell(e.x,e.y)
+        i = self.l_col.index(c.d)
+        i = len(self.l_col)-1 if i-1 < 0 else i-1
+        c.d = self.l_col[i]
+        self.d.cell_refresh(c)
     def next_col(self,e):
-        """Changes the cell's color id."""
+        """Changes the cell's color id (next)."""
         c = self.d.get_cell(e.x,e.y)
         i = self.l_col.index(c.d)
         i = 0 if i+1 >= len(self.l_col) else i+1
