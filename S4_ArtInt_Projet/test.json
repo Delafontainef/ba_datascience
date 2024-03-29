@@ -1,0 +1,116 @@
+{
+    "draw": {
+        "colors": {
+            "": "white",
+            "obstacle": "black",
+            "personne": "cyan",
+            "abri": "yellow"
+        }
+    },
+    "grid": {
+        "size": [
+            100,
+            100
+        ],
+        "cells": [
+            {
+                "pos": [
+                    3,
+                    0
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    5,
+                    0
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    6,
+                    0
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    0,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    7,
+                    2
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    4,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    0,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    1,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    7,
+                    7
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    3,
+                    8
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    9
+                ],
+                "color": "personne"
+            }
+        ]
+    }
+}
