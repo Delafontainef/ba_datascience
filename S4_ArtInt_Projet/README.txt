@@ -11,39 +11,21 @@ Fournit une interface de type 'grille' (matrice n*n) via tkinter.
 
 #### Comment faire
 
-1. Modifier manuellement le json
-    1.1. Vérifier le dictionnaire de couleurs
-    1.2. Vérifier la taille de la grille
-2. Double-cliquer sur 'grid.pyw'
-3. Modifier la grille avec "clic-gauche"
-4. Sauvegarder avec "Ctrl+s"
-
-1. Modifier manuellement le json
-    Les dernières lignes de 'grid.pyw', au moment de créer l'instance
-    'Editor', lui passent en chemin le fichier 'test.json'.
-  1.1. Vérifier le dictionnaire de couleurs
-    L'une des clés du fichier est 'colors' de type dict<str:str>
-    où les clés sont des codes ("obstacle","personne",etc.)
-    et les valeurs des codes couleur ("white", "rgb(250,128,114)", 
-    "#6495ed",etc.).
-    Note: la clé vide "" est la valeur des cases par défaut.
-    Note: éviter les couleurs aggressives pour les yeux...
-  1.2. Vérifier la taille de la grille
-    Une autre clé du fichier est 'size' de type list<int> où chaque 
-    nombre est la longueur de la matrice (largeur, hauteur).
-    Note: La méthode 'Draw.get_size()' présuppose que toutes les lignes 
-          de la matrice ont la même longueur.
-2. Double-cliquer sur 'grid.pyw'
-    Les librairies importées sont toutes natives dans Python 3. Il devrait 
-    donc y avoir une fenêtre qui s'ouvre avec un canvas (et des barres de 
-    défilement sur les côtés) et la grille du json affichée dedans.
-3. Modifier la grille avec "clic-gauche"
-    Un clic-gauche sur une case change sa couleur.
-    Plus précisément, le clic-gauche change le code de la case puis demande
-    au GUI de se mettre à jour. 
-4. Sauvegarder avec "Ctrl+s".
-    Cela va sauvegarder la grille modifiée dans "test.json".
-    Il faut ensuite renommer les fichiers manuellement, etc.
+1. Double-cliquer sur 'grid.pyw'
+    Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
+    'test.json'.
+2. Modifier la grille
+    Clic-gauche et clic-droit sur les cases pour changer leur couleur.
+3. Sauvegarder/charger
+    "Ctrl+s" pour sauvegarder,
+    "Ctrl+Alt+s" pour sauvegarder sous (nouveau nom de fichier),
+    "Ctrl+o" pour charger un fichier.
+    
+Note : 
+    L'éditeur ne permet pas encore de créer une nouvelle grille.
+    L'éditeur ne permet pas de modifier la taille de la grille ou 
+        le dictionnaire de couleurs. Pour cela, il faut modifier 
+        manuellement le '.json' (clés 'colors' et 'size').
 
 #### 28.03.2024
 
@@ -61,11 +43,14 @@ Désormais 'Draw' met l'image à jour toutes les 17 millisecondes ('self.ts')
 La classe 'Editor' se contente d'ajouter les appels souris/clavier. 
     - clic-gauche : appelle 'self.next_col(e)' qui change la couleur de la 
                     case. 
+    - clic-droit :  appelle 'self.prev_col(e)' qui change la couleur dans 
+                    le sens inverse.
     - ctrl+s :      sauvegarde la grille dans le json.
+    - ctrl+alt+s :  sauvegarde en demandant un nom de fichier.
+    - ctrl+o :      charge un fichier json (en demandant le nom du fichier).
     
-Note : L'éditeur ne permet pas de choisir dans quoi sauvegarder. 
-       Il y a bien une propriété 'self.f' en place mais rien pour 
-       "sauvegarder sous..." ni "charger..." ou "nouveau...".
+Note : L'éditeur ne permet pas encore de créer une nouvelle grille de rien.
+Note : L'éditeur n'a pas de menu dédié pour charger/sauvegarder, etc.
 Note : Le dictionnaire de couleurs doit être modifié manuellement 
        dans le json ('draw'>'colors').
 

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk,filedialog
 import os,time,json,math
 
 GR_N = [(0,1),(1,0),(0,-1),(-1,0)]          # all directions
@@ -295,15 +295,28 @@ class Editor:
         self.d.load(f)                  # let 'Draw' handle it
         self.l_col = self.list_col()
         self.d.draw()
+    def load_gui(self):
+        """Loads a file via GUI."""
+        self.f = filedialog.askopenfilename(filetypes=[("json",".json")],
+                                            defaultextension=".json")
+        self.load(self.f)
     def save(self,f=None):
         """Saves as json."""
         f = self.f if not isinstance(f,str) else f
-        self.d.save(f)                  # let 'Draw' handle it
+        if not f:               # need a file path
+            self.f = filedialog.asksaveasfilename(filetypes=[("json",".json")],
+                                                  defaultextension=".json")
+        self.d.save(self.f)     # let 'Draw' handle it
+    def save_as(self,e):
+        """Saves as json. Ensures asking for a file location."""
+        self.save("")
     def bind(self):
         """Add mouse controls."""
         self.d.c.bind("<Button-1>",self.next_col)   # left-clic
         self.d.c.bind("<Button-3>",self.prev_col)   # right-clic
         self.w.bind("<Control-s>",self.save)        # Ctrl+s
+        self.w.bind("<Control-Alt-s>",self.save_as) # Ctrl+alt+s
+        self.w.bind("<Control-o>",self.load_gui)    # Ctrl+o
     def prev_col(self,e):
         """Changes the cell's color id (previous)."""
         c = self.d.get_cell(e.x,e.y)
