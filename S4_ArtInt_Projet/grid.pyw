@@ -243,26 +243,29 @@ class Draw:
         tk.Grid.rowconfigure(self.w,0,weight=1)
         main_frame.columnconfigure(0,weight=1)
         main_frame.rowconfigure(0,weight=1)
-    def _draw_cell(self,c,p=None,ch_create=True):
-        """Draws a given cell."""
+    def _set_cell(self,c,p=None):
         if not p:       # ideally padding is already a parameter
             p = self.get_pad()
         x,y = self.ox+(c.p[0]*(self.sz+p)),self.oy+(c.p[1]*(self.sz+p))
         nx,ny = x+self.sz,y+self.sz
-        if ch_create:   # for 'self.draw()'
-            c.tk = self.c.create_rectangle(x,y,nx,ny,outline="")
-        else:           # for 'self.refresh()'
-            self.c.coords(c.tk,x,y,nx,ny)
+        return x,y,nx,ny
+    def _create_cell(self,c,p=None):
+        """Draws a given cell."""
+        x,y,nx,ny = self._set_cell(c,p)
+        c.tk = self.c.create_rectangle(x,y,nx,ny,outline="")
         self.c.itemconfigure(c.tk,fill=self.d_col[c.d]) # coloring
     def refresh(self):
         """Refreshes the canvas."""
         p = self.get_pad()
-        l_refr = self.gr if self.ch_resize else self.l_refresh
         if self.ch_resize:
+            for cell in self.gr:                    # resize
+                x,y,nx,ny = self._set_cell(cell,p)
+                self.c.coords(cell.tk,x,y,nx,ny)
             self.ch_resize = False
-        for cell in l_refr:                         # for each cell...
-            self._draw_cell(cell,p,False)
-        self.w.after(self.ts,self.refresh)          # repeats itself forever
+        else:                                       # change color
+            for cell in self.l_refresh:
+                self.c.itemconfigure(cell.tk,fill=self.d_col[cell.d])
+        self.w.after(self.ts,self.refresh)
     def draw(self,m=[]):
         """Generates objects for the canvas."""
         if not self.c:                              # no way to draw (canvas)
@@ -275,7 +278,7 @@ class Draw:
             for c in l:                             # for each cell...
                 if not c:                           # allow no cell?
                     continue
-                self._draw_cell(c,p)
+                self._create_cell(c,p)
 
 class New:
     """New grid popup."""
