@@ -8,10 +8,9 @@ Code pour le cours S4 '3IN1007' Intelligence artificielle
 Projet de groupe 
 
 Fournit une interface de type 'grille' (matrice n*n) via tkinter.
-
 #### Comment faire
 
-1. Double-cliquer sur 'grid.pyw'
+1. Double-cliquer sur 'editor.pyw'
     Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
     'test.json'.
 2. Modifier la grille
@@ -26,6 +25,13 @@ Fournit une interface de type 'grille' (matrice n*n) via tkinter.
 Note : L'éditeur ne permet pas de modifier la taille de la grille ou 
        le dictionnaire de couleurs. Pour cela, il faut modifier 
        manuellement le '.json' (clés 'colors' et 'size').
+
+#### 31.03.2024
+
+Déplacé la classe 'Editor' dans un nouveau fichier 'grid.pyw'.
+
+Tenté d'optimiser encore 'refresh()' mais désormais, sans changer 
+fondamentalement la structure, tkinter a atteint ses limites.
 
 #### 29.03.2024
 
