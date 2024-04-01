@@ -100,6 +100,8 @@ class Editor:
     def prev_col(self,e):
         """Changes the cell's color id (previous)."""
         c = self.d.get_cell(e.x,e.y)
+        if not c:
+            return
         i = self.l_col.index(c.d)
         i = len(self.l_col)-1 if i-1 < 0 else i-1
         c.d = self.l_col[i]
@@ -107,6 +109,8 @@ class Editor:
     def next_col(self,e):
         """Changes the cell's color id (next)."""
         c = self.d.get_cell(e.x,e.y)
+        if not c:
+            return
         i = self.l_col.index(c.d)
         i = 0 if i+1 >= len(self.l_col) else i+1
         c.d = self.l_col[i]

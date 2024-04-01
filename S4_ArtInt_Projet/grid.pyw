@@ -66,6 +66,7 @@ class Cell:
 class Grid:
     """The grid."""
     def __init__(self,x=0,y=0,f=None):
+        self.w,self.h = y,x
         self.grid = self.gen_grid(x,y)
         if f:
             self.load(f)
@@ -85,16 +86,13 @@ class Grid:
         # operations
     def gen_grid(self,x,y):
         """Generates a matrix of cells."""
+        self.w,self.h = y,x
         return [[Cell((i,j),grid=self) for i in range(x)] for j in range(y)]
-    def get_size(self):
-        """Gives the grid's dimensions."""
-        return (len(self.grid[0]),len(self.grid))
     def get(self,x,y):
         """Returns Cell at coordinates (x,y)."""
-        if (not self.grid) or (not self.grid[0]):       # no grid
+        if (not self.grid) or (not self.grid[0]):           # no grid
             return None
-        lx,ly = self.get_size()                         # matrix dimensions
-        if (x < 0 or x >= lx) or (y < 0 or y >= ly):    # out of range
+        if (x < 0 or x >= self.w) or (y < 0 or y >= self.h):# out of range
             return None
         return self.grid[y][x]
         # files
@@ -107,6 +105,8 @@ class Grid:
             if (not 'pos' in d_cell):
                 continue
             cell = self.get(*d_cell['pos'])
+            if not cell:
+                continue
             if 'cost' in d_cell:
                 cell.c = d_cell['cost']
             if 'inventory' in d_cell:
@@ -115,7 +115,7 @@ class Grid:
                 cell.d = d_cell['color']
     def save(self,f=None):
         """Saves grid in json format."""
-        d_grid = {'size':self.get_size(),
+        d_grid = {'size':[self.w,self.h],
                   'cells':[]}
         for cell in self:
             if (not cell) or (not (cell.c != 0 or cell.i or cell.d)):
@@ -140,7 +140,7 @@ class Draw:
         self.ts = ts
             # internals
         self.ox,self.oy,self.sz = 0,0,80
-        self.x,self.y = m
+        self.v_area = (0,0,0,0)
         self.draw_id = None
         self.ch_resize,self.l_refresh = False,[]
             # load stuff
@@ -176,8 +176,8 @@ class Draw:
     def get_cell(self,x,y):
         """Returns the cell instance according to coordinates."""
         p = self.get_pad()
-        px = (x-self.ox)//(self.sz+p)
-        py = (y-self.oy)//(self.sz+p)
+        px = int((x+self.v_area[0]-self.ox)//(self.sz+p))
+        py = int((y+self.v_area[1]-self.oy)//(self.sz+p))
         return self.gr.get(px,py)
     def cell_refresh(self,c):
         """Asks 'Draw' to redraw that cell."""
@@ -198,43 +198,48 @@ class Draw:
             ly+=1
             lx = len(l) if len(l) > lx else lx
         return (lx,ly)
-    def on_resize(self,event):
-        """If the window is resized, calculates new cell size ('self.sz')
-           and offsets ('self.ox/self.oy')."""
-        if not event.widget == self.c:              # canvas only
-            return
-        w,h = event.width,event.height              # new canvas size
-        dw = w//(self.x)*0.92 if self.x > 0 else 0
-        dh = h//(self.y)*0.92 if self.y > 0 else 0
-        ch_w = True if dw < dh else False           # new cell size
+    def get_v_area(self):
+        return (self.c.canvasx(0),self.c.canvasy(0),
+                self.c.canvasx(self.c.winfo_width()),
+                self.c.canvasy(self.c.winfo_height()))
+    def on_scr_h(self,x,y):
+        """If the canvas is moved in any way shape or form,
+        this will detect it."""
+        self.v_area = vx,vy,w,h = self.get_v_area()     # visible area
+        w = w-vx if w-vx >= 0 else 0
+        h = h-vy if w-vx >= 0 else 0
+        wx,hy = self.gr.w,self.gr.h
+        dw = int(w//(wx)) if wx > 0 else 0          # new canvas size
+        dh = int(h//(hy)) if hy > 0 else 0
+        ch_w = True if dw < dh else False               # new cell size
         if (ch_w and dw > 80) or (dh > 80):
             self.sz = 80
         elif (ch_w and dw < 10) or (dh < 10):
             self.sz = 10
         else:
             self.sz = dw if ch_w else dh
-        p = self.get_pad()                          # padding
-        self.ox = (w-((self.sz+p)*self.x)+p)//2     # offset (x axis)
+        p = self.get_pad()                              # padding
+        self.ox = int((w-((self.sz+p)*wx)+p)//2)        # offset (x axis)
         self.ox = 0 if self.ox < 0 else self.ox
-        self.oy = (h-((self.sz+p)*self.y)+p)//2     # offset (y axis)
+        self.oy = int((h-((self.sz+p)*hy)+p)//2)        # offset (y axis)
         self.oy = 0 if self.oy < 0 else self.oy
-        self.ch_resize = True
+        self.ch_resize = True                           # ask for refresh
+        self.scr_h.set(x,y)                             # apply to scrollbar
         # GUI
     def _build_gui(self,x,y):
         """Builds the GUI. Adds 'self.c' to properties."""
-        self.w.bind("<Configure>",self.on_resize)
             # canvas
         main_frame = tk.Frame(self.w,width=x,height=y)
         self.c = tk.Canvas(main_frame)
         self.c.grid(row=0,column=0,sticky="news")
-        scr_h = tk.Scrollbar(main_frame,orient=tk.HORIZONTAL,
+        self.scr_h = tk.Scrollbar(main_frame,orient=tk.HORIZONTAL,
                               command=self.c.xview)
-        scr_h.grid(row=1,column=0,sticky="ew")
-        scr_v = tk.Scrollbar(main_frame,orient=tk.VERTICAL,
+        self.scr_h.grid(row=1,column=0,sticky="ew")
+        self.scr_v = tk.Scrollbar(main_frame,orient=tk.VERTICAL,
                               command=self.c.yview)
-        scr_v.grid(row=0,column=1,sticky="ns")
-        self.c.config(xscrollcommand=scr_h.set,
-                      yscrollcommand=scr_v.set)
+        self.scr_v.grid(row=0,column=1,sticky="ns")
+        self.c.config(xscrollcommand=self.on_scr_h,
+                      yscrollcommand=self.scr_v.set)
         self.c.bind('<Configure>',
                lambda e: self.c.configure(scrollregion=self.c.bbox("all")))
         main_frame.grid(row=0,column=0,sticky=tk.N+tk.S+tk.E+tk.W)
@@ -254,6 +259,17 @@ class Draw:
         x,y,nx,ny = self._set_cell(c,p)
         c.tk = self.c.create_rectangle(x,y,nx,ny,outline="")
         self.c.itemconfigure(c.tk,fill=self.d_col[c.d]) # coloring
+    def draw(self):
+        """Generates objects for the canvas."""
+        if not self.c:                              # no way to draw (canvas)
+            return
+        self.c.delete("all")                        # clear canvas
+        p = self.get_pad()
+        for l in self.gr.grid:                      # for each line...                        
+            for c in l:                             # for each cell...
+                if not c:                           # allow no cell?
+                    continue
+                self._create_cell(c,p)
     def refresh(self):
         """Refreshes the canvas."""
         p = self.get_pad()
@@ -266,20 +282,7 @@ class Draw:
             for cell in self.l_refresh:
                 self.c.itemconfigure(cell.tk,fill=self.d_col[cell.d])
         self.w.after(self.ts,self.refresh)
-    def draw(self,m=[]):
-        """Generates objects for the canvas."""
-        if not self.c:                              # no way to draw (canvas)
-            return
-        self.c.delete("all")                        # clear canvas
-        m = self.gr.grid if not m else m            # any grid?
-        self.x,self.y = self.get_size(m)            # grid dimensions
-        p = self.get_pad()
-        for l in m:                                 # for each line...                        
-            for c in l:                             # for each cell...
-                if not c:                           # allow no cell?
-                    continue
-                self._create_cell(c,p)
-
+    
 if __name__ == "__main__":
     w = tk.Tk()
     d = Draw(w,f="test.json")
