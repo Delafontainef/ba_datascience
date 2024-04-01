@@ -209,8 +209,8 @@ class Draw:
         w = w-vx if w-vx >= 0 else 0
         h = h-vy if w-vx >= 0 else 0
         wx,hy = self.gr.w,self.gr.h
-        dw = int(w//(wx)) if wx > 0 else 0          # new canvas size
-        dh = int(h//(hy)) if hy > 0 else 0
+        dw = int(w//(wx)*0.92) if wx > 0 else 0         # new canvas size
+        dh = int(h//(hy)*0.92) if hy > 0 else 0
         ch_w = True if dw < dh else False               # new cell size
         if (ch_w and dw > 80) or (dh > 80):
             self.sz = 80

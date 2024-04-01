@@ -8,7 +8,14 @@ class New:
     def __init__(self,parent,w):
         self.par = parent
         self._build_gui(w)
-        
+    def _ch_entry(self,val):
+        """Validates entry variables."""
+        if not val:                         # allow empty val
+            return True
+        elif not re.match("[0-9]+$",val):   # but only integers
+            return False
+        val = int(val)                      # between ]0,100]
+        return True if (val > 0 and val <= 100) else False
     def _build_gui(self,w):
         """GUI elements for the popup."""
         self.s = tk.Toplevel(w)                                 # popup
@@ -18,20 +25,14 @@ class New:
         vld = (self.s.register(self._ch_entry),'%P')            # fields
         e1 = ttk.Entry(self.s,textvariable=self.x,validate="key",
                        validatecommand=vld)
+        e1.focus_set()
         e2 = ttk.Entry(self.s,textvariable=self.y,validate="key",
                        validatecommand=vld)
         b = ttk.Button(self.s,text="Créer",command=self._ret)  # button
+        b.bind("<Return>",self._ret)
         e1.grid(row=0,column=0); e2.grid(row=0,column=1)
         b.grid(row=1,column=0,columnspan=2)
-    def _ch_entry(self,val):
-        """Validates entry variables."""
-        if not val:                         # allow empty val
-            return True
-        elif not re.match("[0-9]+$",val):   # but only integers
-            return False
-        val = int(val)                      # between ]0,100]
-        return True if (val > 0 and val <= 100) else False
-    def _ret(self):
+    def _ret(self,event):
         """Tells the editor the final value."""
         x = self.x.get(); y = self.y.get()
         x = "1" if not x else x
@@ -58,10 +59,11 @@ class Editor:
         self.d.draw()
     def new(self,x=-1,y=-1):
         """Creates a new grid."""
-        if x <= 0 or y <= 0:
+        if (not isinstance(x,int)) or (x <= 0 or y <= 0):
             return New(self,self.w)
-        self.d.gr = Grid(x,y)
-        self.d.draw()
+        self.d.gr = grid.Grid(x,y)
+        self.d.draw()                                       # create drawing
+        self.d.on_scr_h(*self.d.scr_h.get())                # resize
     def load_gui(self):
         """Loads a file via GUI."""
         self.f = filedialog.askopenfilename(filetypes=[("json",".json")],
