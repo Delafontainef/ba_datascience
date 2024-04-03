@@ -26,6 +26,18 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
        le dictionnaire de couleurs. Pour cela, il faut modifier 
        manuellement le '.json' (clés 'colors' et 'size').
 
+
+#### 03.04.2024
+
+Ajouté 'Draw.get_v_pos()'. Testé une solution ne recréant que les 
+rectangles visibles (dans 'Draw.refresh()'). 
+
+C'est un échec. Il y a un clignotement lors du scrolling et les gains, s'ils 
+sont significatifs sur des grilles de +10'000 cases, sont nuls voire négatifs
+pour les petites grilles.
+Il serait encore possible de modifier la structure de 'Grid' (en ne conservant 
+que les cases "utiles" en mémoire) mais ça n'a plus le moindre intérêt.
+
 #### 31.03.2024
 
 Déplacé la classe 'Editor' dans un nouveau fichier 'grid.pyw'.

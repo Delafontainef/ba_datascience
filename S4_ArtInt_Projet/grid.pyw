@@ -140,7 +140,7 @@ class Draw:
         self.ts = ts
             # internals
         self.ox,self.oy,self.sz = 0,0,80
-        self.v_area = (0,0,0,0)
+        self.v_area = (0,0,88*m[0],88*m[1])
         self.draw_id = None
         self.ch_resize,self.l_refresh = False,[]
             # load stuff
@@ -171,9 +171,9 @@ class Draw:
         # properties set/get
     def get_pad(self):
         """Returns the padding between cells."""
-        p = self.sz//10
+        p = int(self.sz//10)
         return 2 if p < 2 else p
-    def get_cell(self,x,y):
+    def get(self,x,y): # get cell from GUI coordinates
         """Returns the cell instance according to coordinates."""
         p = self.get_pad()
         px = int((x+self.v_area[0]-self.ox)//(self.sz+p))
@@ -189,19 +189,26 @@ class Draw:
         else:                               # assumed milliseconds
             self.ts = ts
         # dimensions and resize
-    def get_size(self,m,ch_len=True):
-        """Gets the size of a given matrix 'm'."""
-        if ch_len:      # all lines assumed of equal length
-            return (len(m[0]) if m else 0,len(m))
-        lx,ly = 0,0
-        for l in m:     # must check every line
-            ly+=1
-            lx = len(l) if len(l) > lx else lx
-        return (lx,ly)
     def get_v_area(self):
+        """Returns the visible area coordinates."""
         return (self.c.canvasx(0),self.c.canvasy(0),
                 self.c.canvasx(self.c.winfo_width()),
                 self.c.canvasy(self.c.winfo_height()))
+    def get_v_pos(self,p=None):
+        """Returns the start/end grid positions for the visible area."""
+        p = self.get_pad() if not p else p
+        mxy = int((self.sz+p)*self.gr.w)+p  # matrix size (x/y axes)
+        px = 0 if self.v_area[0] <= self.ox else \
+             int((self.v_area[0]-self.ox)//(self.sz+p))
+        py = 0 if self.v_area[1] <= self.oy else \
+             int((self.v_area[1]-self.oy)//(self.sz+p))
+        pnx = self.gr.w if self.v_area[2] >= self.ox+mxy else \
+             int((self.v_area[2]-self.ox)//(self.sz+p))+1
+        pny = self.gr.h if self.v_area[3] >= self.oy+mxy else \
+             int((self.v_area[3]-self.oy)//(self.sz+p))+1
+        pnx = self.gr.w if pnx > self.gr.w else pnx
+        pny = self.gr.h if pny > self.gr.h else pny
+        return px,py,pnx,pny
     def on_scr_h(self,x,y):
         """If the canvas is moved in any way shape or form,
         this will detect it."""
@@ -209,8 +216,8 @@ class Draw:
         w = w-vx if w-vx >= 0 else 0
         h = h-vy if w-vx >= 0 else 0
         wx,hy = self.gr.w,self.gr.h
-        dw = int(w//(wx)*0.92) if wx > 0 else 0         # new canvas size
-        dh = int(h//(hy)*0.92) if hy > 0 else 0
+        dw = int(w//(wx)*0.9) if wx > 0 else 0          # new canvas size
+        dh = int(h//(hy)*0.9) if hy > 0 else 0
         ch_w = True if dw < dh else False               # new cell size
         if (ch_w and dw > 80) or (dh > 80):
             self.sz = 80
@@ -274,6 +281,15 @@ class Draw:
         """Refreshes the canvas."""
         p = self.get_pad()
         if self.ch_resize:
+            # px,py,pnx,pny = self.get_v_pos(p)
+            # self.c.delete("all")                    # clear canvas
+            # for h in range(py,pny):                 # only relevant cells
+                # for w in range(px,pnx):
+                    # self._create_cell(self.gr.get(w,h),p)
+            # if px > 0 or py > 0:                    # for scrollregion
+                # self._create_cell(self.gr.get(0,0),p)
+            # if pnx < self.gr.w or pny < self.gr.h:
+                # self._create_cell(self.gr.get(self.gr.w-1,self.gr.h-1),p)
             for cell in self.gr:                    # resize
                 x,y,nx,ny = self._set_cell(cell,p)
                 self.c.coords(cell.tk,x,y,nx,ny)
