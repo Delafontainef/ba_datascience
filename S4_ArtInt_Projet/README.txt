@@ -6,9 +6,13 @@
 
 Code pour le cours S4 '3IN1007' Intelligence artificielle
 Projet de groupe 
-
 Fournit une interface de type 'grille' (matrice n*n) via tkinter.
+Fournit un éditeur rudimentaire pour colorer la grille.
+Fournit un "moteur de jeu".
+
 #### Comment faire
+
+    ## Éditeur
 
 1. Double-cliquer sur 'editor.pyw'
     Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
@@ -26,6 +30,37 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
        le dictionnaire de couleurs. Pour cela, il faut modifier 
        manuellement le '.json' (clés 'colors' et 'size').
 
+    ## Jeu
+    
+1. Double-cliquer sur 'meteor.py'
+    Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
+    'test.json'.
+2. Presser les touches [Control]+[n]
+    Cela va lancer la partie (une case "rouge" devrait apparaître).
+3. Utiliser les flèches directionnelles ou [wasd] pour déplacer le joueur.
+    L'objectif est de récupérer toutes les personnes (cases bleues) 
+    avant de rejoindre un abri (cases jaunes). Le score final est affiché en 
+    console.
+    
+Note : pas de classe 'joueur'.
+Note : pas de retour après une action (pour l'agent).
+Note : pas de chargement/sauvegarde de partie. 
+Note : pas de météore.
+
+
+
+#### 06.04.2024
+
+Ajouté 'meteor.py' avec la classe 'Game'. 
+
+La classe est très rudimentaire, notamment pour gérer le joueur, et ne 
+génère pas encore de météore (ni ne charge/sauvegarde de partie).
+
+Les fonctions pour l'agent ("mU,mD,mL,mR") sont en place mais il n'y a rien
+pour connaître l'état de l'environnement. Retourner un dictionnaire ? Ou 
+laisser l'agent lire la grille par lui-même ?
+Mieux vaut supposer qu'il faille transmettre l'information à l'agent, comme 
+pour le *snake*.
 
 #### 03.04.2024
 
