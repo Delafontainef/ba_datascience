@@ -32,7 +32,7 @@ class New:
         b.bind("<Return>",self._ret)
         e1.grid(row=0,column=0); e2.grid(row=0,column=1)
         b.grid(row=1,column=0,columnspan=2)
-    def _ret(self,event):
+    def _ret(self,event=None):
         """Tells the editor the final value."""
         x = self.x.get(); y = self.y.get()
         x = "1" if not x else x
@@ -101,7 +101,7 @@ class Editor:
         self.w.bind("<Control-o>",self.load_gui)    # Ctrl+o
     def prev_col(self,e):
         """Changes the cell's color id (previous)."""
-        c = self.d.get_cell(e.x,e.y)
+        c = self.d.get(e.x,e.y)
         if not c:
             return
         i = self.l_col.index(c.d)
@@ -110,7 +110,7 @@ class Editor:
         self.d.cell_refresh(c)
     def next_col(self,e):
         """Changes the cell's color id (next)."""
-        c = self.d.get_cell(e.x,e.y)
+        c = self.d.get(e.x,e.y)
         if not c:
             return
         i = self.l_col.index(c.d)
