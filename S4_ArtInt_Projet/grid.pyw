@@ -1,7 +1,6 @@
 import tkinter as tk
 import os,re,time,json,math
 
-GR_N = [(0,1),(1,0),(0,-1),(-1,0)]          # all directions
     # file functions
 def load_json(f):
     """Loads a dict from a json file."""
@@ -19,15 +18,14 @@ def save_json(f,d_dat):
         wf = open(f,'w',encoding="utf-8")
         json.dump(d_dat,wf,ensure_ascii=False,indent=4)
         wf.close()
-
+        
 class Cell:
     """A grid cell."""
-    def __init__(self,pos=(0,0),cost=0,inv=[],grid=None):
+    def __init__(self,pos=(0,0),cost=0,inv=[]):
             # general
         self.p = pos                        # position
-        self.gr = grid                      # grid
         self.c = cost                       # cost
-        self.i = inv                        # inventory
+        self.i = inv.copy()                 # inventory
             # tkinter
         self.d = ""                         # drawing
         self.tk = None                      # drawn object
@@ -48,21 +46,6 @@ class Cell:
     def ch(self,x):
         """Check inventory for 'x'."""
         return True if x in self.i else False
-    def next(self,ch_none=False,ch_f=None):
-        """Returns adjacent cells.
-        'ch_none' to ignore missing cells.
-        'ch_f' to pass a function ('nc' as only parameter)."""
-        l_res = []
-        if not self.gr:                         # no grid
-            return l_res
-        x,y = self.pos                          # our position
-        for tpl in GR_N:                        # for each direction
-            nx,ny = x+tpl[0],y+tpl[0]
-            nc = self.gr.get(nx,ny)            # ask grid for cell
-            if (ch_none and (not nc)) or (ch_f and (not ch_f(nc))):
-                continue
-            l_res.append(self.gr.get(nx,ny))   # add cell to result
-        return l_res
 class Grid:
     """The grid."""
     def __init__(self,x=0,y=0,f=None):
@@ -87,7 +70,7 @@ class Grid:
     def gen_grid(self,x,y):
         """Generates a matrix of cells."""
         self.w,self.h = y,x
-        return [[Cell((i,j),grid=self) for i in range(x)] for j in range(y)]
+        return [[Cell((i,j)) for i in range(x)] for j in range(y)]
     def get(self,x,y):
         """Returns Cell at coordinates (x,y)."""
         if (not self.grid) or (not self.grid[0]):           # no grid
@@ -95,6 +78,50 @@ class Grid:
         if (x < 0 or x >= self.w) or (y < 0 or y >= self.h):# out of range
             return None
         return self.grid[y][x]
+    def direction(self,p1,p2,ch_one=True):
+        """Returns the direction from p1 to p2 (sets of coordinates)."""
+        dx,dy = p2[0]-p1[0],p2[1]-p1[1]
+        if ch_one:
+            if abs(dx) >= abs(dy):
+                dy = 0
+            else:
+                dx = 0
+        dx = int(dx/abs(dx)) if dx != 0 else 0
+        dy = int(dy/abs(dy)) if dy != 0 else 0
+        return (dx,dy)
+    def distance(self,p1,p2):
+        """Returns the distance between two sets of coordinates."""
+        nx = p1[0]-p2[0] if p1[0] >= p2[0] else p2[0]-p1[0]
+        ny = p1[1]-p2[1] if p1[1] >= p2[1] else p2[1]-p1[1]
+        return nx+ny
+    def expand(self,cell,lim=-1,ch_self=False):
+        """A generator for expansion around a point."""
+        l_cur = [cell]
+        gr_n = [(0,-1),(1,0),(0,1),(-1,0),(0,-1)]       # all directions(+loop)
+        while l_cur:
+            c = l_cur.pop(0)                                    # current cell
+            if not c or (lim >= 0 and self.distance(c.p,cell.p) >= lim):
+                break
+            if not ch_self or c != cell:                        # not first?
+                yield c                                         # yield current
+            if c.p == cell.p:                                   # starting cell
+                l_next = gr_n[0:4]
+            elif c.p[0] < cell.p[0] and c.p[1] <= cell.p[1]:    # upper-left
+                l_next = gr_n[3:5]
+            elif c.p[0] >= cell.p[0] and c.p[1] < cell.p[1]:    # upper-right
+                l_next = gr_n[0:2]
+            elif c.p[0] > cell.p[0] and c.p[1] >= cell.p[1]:    # lower-right
+                l_next = gr_n[1:3]
+            elif c.p[0] <= cell.p[0] and c.p[1] > cell.p[1]:    # lower-left
+                l_next = gr_n[2:4]
+            for tpl in l_next:
+                nx,ny = c.p[0]+tpl[0],c.p[1]+tpl[1]             # next coords'
+                nc = self.get(nx,ny)                            # next cell
+                if not nc or nc in l_cur:
+                    continue
+                elif lim >= 0 and self.distance((nx,ny),cell.p) >= lim:
+                    break
+                l_cur.append(nc)
         # files
     def load(self,f):
         """Loads a grid from json."""
@@ -144,7 +171,8 @@ class Draw:
         self.draw_id = None
         self.ch_resize,self.l_refresh = False,[]
             # load stuff
-        self.load(f)                        # load graph
+        if f:
+            self.load(f)                        # load graph
         self._build_gui(*dim)               # build interface
         # self.c
         self.draw()                         # first drawing

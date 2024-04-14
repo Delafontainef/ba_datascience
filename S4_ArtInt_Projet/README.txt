@@ -41,13 +41,40 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
     L'objectif est de récupérer toutes les personnes (cases bleues) 
     avant de rejoindre un abri (cases jaunes). Le score final est affiché en 
     console.
-    
-Note : pas de classe 'joueur'.
+
 Note : pas de retour après une action (pour l'agent).
 Note : pas de chargement/sauvegarde de partie. 
 Note : pas de météore.
 
 
+#### 14.04.2024
+
+Modifié 'meteor.py' avec la classe 'Meteor' et son intégration dans 'Game'.
+Également ajouté les méthodes 'direction','distance' et 'expand' à 'Grid'.
+
+Finalement abandonné une classe à part pour le joueur.
+Il faudrait de toute manière intégrer la transparence au canvas pour gérer 
+des combinaisons complexes, et tkinter ne le fait pas tout seul. Donc pas 
+de véhicules et autres.
+
+Version semi-aléatoire en place, les météores tombent de façon aléatoire 
+mais toutes les cases deviennent nécessairement des obstacles. En l'état 
+le jeu semble satisfaisant.
+
+La méthode "Grid.expand" est le plus gros ajout : il permet de 'scanner' les
+alentours d'une case, pour dessiner les météores ou sélectionner une case 
+libre. 
+"Grid.distance" donne la distance entre deux cases et "Grid.direction" 
+retourne un tuple (x,y) avec la direction à prendre pour aller d'un point 
+à un autre. 
+
+Il faut encore déterminer l'information renvoyée à l'agent (et la manière)
+mais en l'état on peut considérer le jeu lui-même comme fini.
+(On pourra modifier au besoin.)
+
+J'allais oublier : génération aléatoire du joueur, des abris et des personnes
+à sauver s'ils ne sont pas déjà placés sur la carte manuellement.
+(Pas encore vraiment testé.)
 
 #### 06.04.2024
 

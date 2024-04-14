@@ -1,0 +1,1014 @@
+{
+    "draw": {
+        "colors": {
+            "": "#FFFAFA",
+            "obstacle": "#040404",
+            "personne": "#4682B4",
+            "joueur": "#548B54",
+            "meteore": "#CD3700",
+            "abri": "#FFD700"
+        }
+    },
+    "grid": {
+        "size": [
+            20,
+            20
+        ],
+        "cells": [
+            {
+                "pos": [
+                    1,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    10,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    1
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    16,
+                    1
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    1,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    2
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    10,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    2
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    12,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    15,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    16,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    2
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    1,
+                    3
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    3
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    12,
+                    3
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    3
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    14,
+                    3
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    3
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    18,
+                    3
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    1,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    9,
+                    4
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    14,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    4
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    5
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    5
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    5
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    6
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    5,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    9,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    10,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    6
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    6
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    4,
+                    7
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    5,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    8,
+                    7
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    9,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    10,
+                    7
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    11,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    7
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    8
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    8
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    8
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    3,
+                    9
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    5,
+                    9
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    9
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    8,
+                    9
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    10,
+                    9
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    13,
+                    9
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    17,
+                    9
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    9
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    8,
+                    10
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    9,
+                    10
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    10
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    10
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    11
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    8,
+                    11
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    9,
+                    11
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    16,
+                    11
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    1,
+                    12
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    2,
+                    12
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    12
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    12
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    12
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    13,
+                    12
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    16,
+                    12
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    17,
+                    12
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    12
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    13
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    6,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    13
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    9,
+                    14
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    10,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    15,
+                    14
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    15
+                ],
+                "color": "abri"
+            },
+            {
+                "pos": [
+                    3,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    15
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    5,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    6,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    10,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    11,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    15,
+                    16
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    4,
+                    17
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    11,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    12,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    13,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    14,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    15,
+                    17
+                ],
+                "color": "personne"
+            },
+            {
+                "pos": [
+                    17,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    17
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    17,
+                    18
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    18,
+                    18
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    0,
+                    19
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    1,
+                    19
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    2,
+                    19
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    3,
+                    19
+                ],
+                "color": "obstacle"
+            },
+            {
+                "pos": [
+                    7,
+                    19
+                ],
+                "color": "personne"
+            }
+        ]
+    }
+}
