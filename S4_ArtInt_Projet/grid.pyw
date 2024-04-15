@@ -71,13 +71,15 @@ class Grid:
         """Generates a matrix of cells."""
         self.w,self.h = y,x
         return [[Cell((i,j)) for i in range(x)] for j in range(y)]
-    def get(self,x,y):
+    def get(self,p):
         """Returns Cell at coordinates (x,y)."""
+        p = p.p if isinstance(p,Cell) else p
         if (not self.grid) or (not self.grid[0]):           # no grid
             return None
-        if (x < 0 or x >= self.w) or (y < 0 or y >= self.h):# out of range
+        if ((p[0] < 0 or p[0] >= self.w) 
+             or (p[1] < 0 or p[1] >= self.h)):# out of range
             return None
-        return self.grid[y][x]
+        return self.grid[p[1]][p[0]]
     def direction(self,p1,p2,ch_one=True):
         """Returns the direction from p1 to p2 (sets of coordinates)."""
         dx,dy = p2[0]-p1[0],p2[1]-p1[1]
@@ -116,7 +118,7 @@ class Grid:
                 l_next = gr_n[2:4]
             for tpl in l_next:
                 nx,ny = c.p[0]+tpl[0],c.p[1]+tpl[1]             # next coords'
-                nc = self.get(nx,ny)                            # next cell
+                nc = self.get((nx,ny))                          # next cell
                 if not nc or nc in l_cur:
                     continue
                 elif lim >= 0 and self.distance((nx,ny),cell.p) >= lim:
@@ -131,7 +133,7 @@ class Grid:
         for d_cell in d_grid['cells']:
             if (not 'pos' in d_cell):
                 continue
-            cell = self.get(*d_cell['pos'])
+            cell = self.get(d_cell['pos'])
             if not cell:
                 continue
             if 'cost' in d_cell:
@@ -204,9 +206,8 @@ class Draw:
     def get(self,x,y): # get cell from GUI coordinates
         """Returns the cell instance according to coordinates."""
         p = self.get_pad()
-        px = int((x+self.v_area[0]-self.ox)//(self.sz+p))
-        py = int((y+self.v_area[1]-self.oy)//(self.sz+p))
-        return self.gr.get(px,py)
+        return self.gr.get((int((x+self.v_area[0]-self.ox)//(self.sz+p)),
+                            int((y+self.v_area[1]-self.oy)//(self.sz+p))))
     def cell_refresh(self,c):
         """Asks 'Draw' to redraw that cell."""
         self.l_refresh.append(c)
@@ -313,11 +314,11 @@ class Draw:
             # self.c.delete("all")                    # clear canvas
             # for h in range(py,pny):                 # only relevant cells
                 # for w in range(px,pnx):
-                    # self._create_cell(self.gr.get(w,h),p)
+                    # self._create_cell(self.gr.get((w,h)),p)
             # if px > 0 or py > 0:                    # for scrollregion
-                # self._create_cell(self.gr.get(0,0),p)
+                # self._create_cell(self.gr.get((0,0)),p)
             # if pnx < self.gr.w or pny < self.gr.h:
-                # self._create_cell(self.gr.get(self.gr.w-1,self.gr.h-1),p)
+                # self._create_cell(self.gr.get((self.gr.w-1,self.gr.h-1)),p)
             for cell in self.gr:                    # resize
                 x,y,nx,ny = self._set_cell(cell,p)
                 self.c.coords(cell.tk,x,y,nx,ny)

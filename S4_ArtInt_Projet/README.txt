@@ -42,9 +42,14 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
     avant de rejoindre un abri (cases jaunes). Le score final est affiché en 
     console.
 
-Note : pas de retour après une action (pour l'agent).
 Note : pas de chargement/sauvegarde de partie. 
-Note : pas de météore.
+
+#### 15.04.2024
+
+Un dictionnaire est désormais retourné avec l'information utile pour l'agent.
+C'est très mal fait, il faudrait utiliser l'information du dictionnaire pour 
+le jeu plutôt que dériver et lors des tests il y a des incongruités mais 
+"good enough for government work".
 
 
 #### 14.04.2024
