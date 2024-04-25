@@ -1,6 +1,8 @@
 import tkinter as tk
 import os,re,time,json,math
 
+GR_N = [(0,-1),(1,0),(0,1),(-1,0),(0,-1)]       # all directions(+loop)
+
     # file functions
 def load_json(f):
     """Loads a dict from a json file."""
@@ -96,10 +98,30 @@ class Grid:
         nx = p1[0]-p2[0] if p1[0] >= p2[0] else p2[0]-p1[0]
         ny = p1[1]-p2[1] if p1[1] >= p2[1] else p2[1]-p1[1]
         return nx+ny
+    def hexplore(self,cell,f=None,lim=-1):
+        """A generator for expansion with 'f' condition."""
+        hi,l_cur,l_elim,l_tmp = 1,[cell],[],[]
+        while l_cur:
+            if lim >= 0 and hi > lim:                           # limit break
+                break
+            l_tmp = []
+            for a in range(len(l_cur)-1,-1,-1):
+                c = l_cur[a]
+                for tpl in GR_N[0:4]:
+                    nx,ny = c.p[0]+tpl[0],c.p[1]+tpl[1]         # next coords'
+                    nc = self.get((nx,ny))                      # next cell
+                    if (not nc or (nc in l_elim)):              # dft check
+                        continue
+                    l_elim.append(nc)
+                    if f and not f(nc,c,hi):                    # external ch
+                        continue
+                    l_tmp.append(nc)
+                    yield ((nc,c,hi))
+            l_cur = l_tmp.copy(); l_tmp = []
+            hi += 1
     def expand(self,cell,lim=-1,ch_self=False):
         """A generator for expansion around a point."""
         l_cur = [cell]
-        gr_n = [(0,-1),(1,0),(0,1),(-1,0),(0,-1)]       # all directions(+loop)
         while l_cur:
             c = l_cur.pop(0)                                    # current cell
             if not c or (lim >= 0 and self.distance(c.p,cell.p) >= lim):
@@ -107,15 +129,15 @@ class Grid:
             if not ch_self or c != cell:                        # not first?
                 yield c                                         # yield current
             if c.p == cell.p:                                   # starting cell
-                l_next = gr_n[0:4]
+                l_next = GR_N[0:4]
             elif c.p[0] < cell.p[0] and c.p[1] <= cell.p[1]:    # upper-left
-                l_next = gr_n[3:5]
+                l_next = GR_N[3:5]
             elif c.p[0] >= cell.p[0] and c.p[1] < cell.p[1]:    # upper-right
-                l_next = gr_n[0:2]
+                l_next = GR_N[0:2]
             elif c.p[0] > cell.p[0] and c.p[1] >= cell.p[1]:    # lower-right
-                l_next = gr_n[1:3]
+                l_next = GR_N[1:3]
             elif c.p[0] <= cell.p[0] and c.p[1] > cell.p[1]:    # lower-left
-                l_next = gr_n[2:4]
+                l_next = GR_N[2:4]
             for tpl in l_next:
                 nx,ny = c.p[0]+tpl[0],c.p[1]+tpl[1]             # next coords'
                 nc = self.get((nx,ny))                          # next cell

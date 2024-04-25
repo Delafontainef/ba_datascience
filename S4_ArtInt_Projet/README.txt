@@ -12,6 +12,27 @@ Fournit un "moteur de jeu".
 
 #### Comment faire
 
+	## Agent
+
+1. Double-cliquer sur 'agent.py'
+	Le jeu va se lancer et se jouer tout seul.
+	
+Note : mieux vaut appeler 'agent.py' via un terminal
+       pour avoir plus d'information sur ce qui se passe.
+Note : des bugs persistent.
+
+    ## Jeu
+    
+1. Double-cliquer sur 'meteor.py'
+    Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
+    'test.json'.
+2. Presser les touches [Control]+[n]
+    Cela va lancer la partie (une case "rouge" devrait apparaître).
+3. Utiliser les flèches directionnelles ou [wasd] pour déplacer le joueur.
+    L'objectif est de récupérer toutes les personnes (cases bleues) 
+    avant de rejoindre un abri (cases jaunes). Le score final est affiché en 
+    console.
+
     ## Éditeur
 
 1. Double-cliquer sur 'editor.pyw'
@@ -30,19 +51,32 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
        le dictionnaire de couleurs. Pour cela, il faut modifier 
        manuellement le '.json' (clés 'colors' et 'size').
 
-    ## Jeu
-    
-1. Double-cliquer sur 'meteor.py'
-    Cela va ouvrir une fenêtre (interface GUI) et charger le fichier 
-    'test.json'.
-2. Presser les touches [Control]+[n]
-    Cela va lancer la partie (une case "rouge" devrait apparaître).
-3. Utiliser les flèches directionnelles ou [wasd] pour déplacer le joueur.
-    L'objectif est de récupérer toutes les personnes (cases bleues) 
-    avant de rejoindre un abri (cases jaunes). Le score final est affiché en 
-    console.
-
 Note : pas de chargement/sauvegarde de partie. 
+
+#### 25.04.2024
+
+Ajouté la fonction de coût/risque (et modifié celle d'utilité).
+Adapté les variables du jeu en conséquence, ajouté la probabilité 
+pour "météore > obstacle" et corrigé une série de bugs.
+
+Le jeu et l'agent sont fonctionnels.
+
+#### 23.04.2024
+
+Implémenté 'agent.py' avec les classes 'TopAgent' et 'MidAgent'.
+TopAgent récupère tous les chemins disponibles ('TopAgent.d_tree') 
+et transforme cela en série d'étapes ('TopAgent.l_goal') qu'il transmet 
+ensuite à MidAgent.
+MidAgent crée les chemins possibles ('MidAgent.get_tree()') à l'aide de 
+la méthode 'hexplore()'. Il bouge aussi le joueur avec 'MidAgent.move()'.
+Cette méthode s'arrête à destination ou si le nombre de météores change. 
+
+Actuellement le script ne calcule pas les probabilités (MidAgent.get_cost())
+et a une fonction d'utilité (TopAgent.utility()) très basique. 
+
+Sur une 10x10 ça fonctionne mais sur une 20x20 soit l'agent met trop de 
+temps, soit il crash. À tester et améliorer, mais la priorité est la méthode,
+pas la capacité de l'agent à gérer des grilles plus grandes.
 
 #### 15.04.2024
 
