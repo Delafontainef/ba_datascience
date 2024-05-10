@@ -53,6 +53,31 @@ Note : L'éditeur ne permet pas de modifier la taille de la grille ou
 
 Note : pas de chargement/sauvegarde de partie. 
 
+#### 10.05.2024
+
+Pas de problème trouvé avec la méthode 'hexplore()' ou l'arbre de décision.
+L'étrange comportement de l'agent semble lié à 'get_cost()' et 'utility()'.
+
+Les lignes 183 et 188 de 'agent.py' sont commentées. Une fois actives, 
+elles affichent dans la console :
+- si le chemin a été sélectionné ("YUP/NOPE")
+- le chemin 'self.l_goal' en question (une liste [(x,y),...] de coordonnées)
+- le nombre de personnes sauvées via ce chemin
+- le score obtenu (via 'get_score()')
+- le risque calculé (via 'get_cost()')
+En gardant en tête que 'utility()' se contente de faire "score*(1-risque)".
+Note : le score ne tient compte que des gens secourus sur le chemin considéré,
+       pas les gens déjà sauvés. En pratique le résultat est le même.
+
+Le seul moyen de comprendre le comportement observé est de dé-commenter ces 
+deux lignes puis de regarder la sortie console pour comprendre quel chemin 
+l'agent a sélectionné et pourquoi. 
+Autrement dit, de ce que je vois le seul moyen d'améliorer l'agent est de 
+changer la fonction de coût ou d'utilité.
+
+Note : réglé le bug d'affichage où le joueur laissait des cases rouges derrière
+       lui.
+
 #### 25.04.2024
 
 Ajouté la fonction de coût/risque (et modifié celle d'utilité).

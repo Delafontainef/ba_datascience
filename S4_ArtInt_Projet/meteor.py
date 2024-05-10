@@ -75,6 +75,18 @@ class Game:
         if gr >= 0 and gr <= i:                     # will be obstacle
             return False
         return True                                 # still clea
+    def ch_draw_met(self,nc):
+        if not nc.ch("meteore"):
+            return False
+        ch_met = False
+        for x,y,r,pr in self.d_dat['meteore']:
+            if (x,y) == nc.p:
+                ch_met = True; break
+        if ch_met:
+            return True
+        while nc.ch("meteore"):
+            nc.remove("meteore")
+        return False
     def hexplore(self,p,ch_a,lim=-1):
         """Access to Grid.hexplore method."""
         self.ch_a = ch_a
@@ -104,7 +116,7 @@ class Game:
             self.d_dat['personne'].remove(c.p)
         if c.ch("abri"):                                # color
             c.d = "abri"
-        elif c.ch("meteore"):
+        elif self.ch_draw_met(c):
             c.d = "meteore"
         self._u(c,c.d)                                  # set old cell
         nc.i.append("joueur")                           # move player
@@ -294,6 +306,7 @@ class Game:
         self.check_meteors()
         c = self.d.gr.get(self.p)
         self.n = self.n-1                       # meteor countdown
+        
         if self.n <= 0:
             self.n = random.randint(3,5)
             self.danger += 1

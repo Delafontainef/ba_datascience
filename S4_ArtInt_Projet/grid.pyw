@@ -100,7 +100,7 @@ class Grid:
         return nx+ny
     def hexplore(self,cell,f=None,lim=-1):
         """A generator for expansion with 'f' condition."""
-        hi,l_cur,l_elim,l_tmp = 1,[cell],[],[]
+        hi,l_cur,l_elim,l_tmp = 1,[cell],[cell],[]
         while l_cur:
             if lim >= 0 and hi > lim:                           # limit break
                 break

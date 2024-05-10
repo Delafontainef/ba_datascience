@@ -8,10 +8,10 @@ class MidAgent:
         self.st = st
     
         # get information for TopAgent
-    def hexplore(self,p,l_g,ch_a,lim=-1):    # check cells surrounding 'p'
+    def hexplore(self,sp,l_g,ch_a,lim=-1):    # check cells surrounding 'p'
         """Explores around a given coordinate."""
         d_nodes = {}
-        for nc,c,l_c,i in self.top.game.hexplore(p,ch_a,lim):
+        for nc,c,l_c,i in self.top.game.hexplore(sp,ch_a,lim):
             d_nodes[nc] = {'p':c,
                            'c':[],
                            'i':i,
@@ -27,7 +27,7 @@ class MidAgent:
             if c in d_nodes:                # parent
                 d_nodes[c]['c'].append(nc)
             for gp,ch_end in l_g:           # for each goal...
-                if gp == nc and gp != p:
+                if gp == nc and gp != sp:
                     yield (d_nodes,gp,ch_end)
     def unroll(self,d_nodes,gp,p):           # get path from 'p' to 'gp'
         """Returns a path from 'p' to 'gp' using 'd_tree'."""
@@ -78,7 +78,7 @@ class MidAgent:
         if d_gprob[1.] == 0:
             gprob = ((1/2)**(d_gprob[0.5]))*((3/4)**(d_gprob[0.25]))
         return self.rec_cost(nb_c,gr,d_dat['danger'],gprob)
-    def get_path(self,d_tree,l_end,ch_a,lim):
+    def get_path(self,d_tree,l_end,ch_a,lim=-1):
         """Use hexplore() on a given set 'l_end'."""
         for sp in d_tree:                           # iterate
             for d_nodes,gp,ch_end in self.hexplore(sp,l_end,ch_a,lim):
@@ -86,9 +86,6 @@ class MidAgent:
                 d_tree[sp][gp] = {'end':ch_end,
                                   'path':l_path,
                                   'cost':len(l_path)}
-                # d_tree[sp][gp]['cost'] = self.get_cost(sp,gp,d_tree[sp][gp])
-                # l_path = [(x,y) for x,y,_ in l_path]
-                # d_tree[sp][gp]['path'] = l_path.copy()
     def get_tree(self,lim=-1):              # get dict' of paths
         """Returns paths from player+all_people to all_people+all_shelters."""
             # setup
@@ -110,7 +107,6 @@ class MidAgent:
         """Move until goal or meteor."""
         d_p = self.top.d_tree[p]
         l_path = d_p[gp]['path']
-        print("\tPATH:",l_path) ##TRACK
         for tpl in l_path:
             om = len(self.top.d_dat['meteore'])
             self.top.d_dat = self.top.game.move(tpl[0:2])
@@ -125,7 +121,7 @@ class MidAgent:
             self.top.d_dat = self.top.game.move((0,-1))
 class TopAgent:
     """Agent part for decision-making."""
-    def __init__(self,game=None,lim=10,st=1.):
+    def __init__(self,game=None,lim=10,st=.4):
         self.game = game if game else Game()
         self.mid = MidAgent(self,st=st)
         self.lim = lim
@@ -175,7 +171,7 @@ class TopAgent:
             risk = self.mid.get_cost(r)
             if not d_p['end']:                          # depth-first
                 l_depth.append((cp,0,r)); continue
-            nb_saved = len(l_depth)-2
+            nb_saved = len(l_depth)-1
             nb_saved = 0 if nb_saved < 0 else nb_saved
             score = self.game.get_score(cp,nb_saved)
             if self.utility(g_score,g_risk,score,risk): # better path
@@ -184,12 +180,12 @@ class TopAgent:
                 for di2 in range(1,len(l_depth)):
                     self.l_goal.append(l_depth[di2][0])
                 self.l_goal.append(cp)
-                print("YUP:",self.l_goal,nb_saved,score,risk) ## TRACK
+                # print("YUP:",self.l_goal,nb_saved,score,risk) ## TRACK
             else:
                 l_tmp = []
                 for di2 in range(1,len(l_depth)):
                     l_tmp.append(l_depth[di2][0])
-                print("NOPE:",l_tmp,nb_saved,score,risk) ## TRACK
+                # print("NOPE:",l_tmp,nb_saved,score,risk) ## TRACK
             l_depth[-1] = (p,di+1,r)
         # actions
     def start(self):
@@ -206,19 +202,19 @@ class TopAgent:
             self.start()
         while not self.d_dat['end']:                # while not end...
             self.move(); self.get_tree(); self.decide()
-            print("Move end:",self.d_dat['joueur'],
-                  self.l_goal,self.d_dat['end']) ##TRACK
             if self.d_dat['end']:
                 break
             elif (not self.l_goal):                 # got trapped
                 print("Time to suicide.")
                 self.mid.suicide()
+            print("Move end:",self.d_dat['joueur'],
+                  self.l_goal,self.d_dat['end']) ##TRACK
         print(self.d_dat['score'])
         return self.d_dat['score']
 
 if __name__ == "__main__":
     game = Game("20.json")               # game intance (with the GUI)
-    agent = TopAgent(game,lim=10,st=.4)
+    agent = TopAgent(game,lim=100,st=.2)
     def thread_it():
         """A convoluted way to run the GUI and the agent at the same time."""
         thr = threading.Thread(target=agent.loop) # run loop
