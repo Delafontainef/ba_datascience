@@ -1,6 +1,10 @@
 from meteor import Game
-import time,threading,sys
-        
+import time,threading,sys,os
+
+def log(txt,wf="log.txt",mode="a"):
+    with open(wf,mode,encoding="utf-8") as f:
+        f.write(txt+"\n")
+
 class MidAgent:
     """Agent part for heavy work."""
     def __init__(self,top,st=1.):
@@ -99,9 +103,12 @@ class MidAgent:
             l_end.append((a,True))
         self.get_path(d_tree,l_end,False,lim) # iterate (shelters)
         return d_tree
+    def get_score(self,nb_saved):
+        return 100 + ((0.9**nb_saved)*100*nb_saved)
         # act on the game
     def start(self):
         """Starts the game."""
+        log("",mode="w")
         return self.top.game.start()
     def move(self,p,gp):
         """Move until goal or meteor."""
@@ -110,7 +117,8 @@ class MidAgent:
         for tpl in l_path:
             om = len(self.top.d_dat['meteore'])
             self.top.d_dat = self.top.game.move(tpl[0:2])
-            time.sleep(self.st)
+            if self.st > 0.:
+                time.sleep(self.st)
             if ((len(self.top.d_dat['meteore']) != om) or
                 self.top.d_dat['end']):
                 break
@@ -143,50 +151,56 @@ class TopAgent:
         if not self.d_tree:                             # need "tree"
             self.get_tree()
         self.l_goal = []
-        l_depth = [(self.d_dat['joueur'],0,[])]
+        l_depth = [[self.d_dat['joueur'],0,[]]]
         g_score,g_risk = -1,-1
-        debug = 1000
+        debug = 10000 ## To avoid the loop from taking forever...
+        log(f"\n\n#### #### ####\n{self.d_tree.keys()}\n\n")
         while True:
             debug = debug-1
             if debug <= 0:
-                break
-            p,di,r = l_depth[-1]; d_t = self.d_tree[p]  # unpack
-            l_k = list(d_t)                             # list of keys
+                print(debug,len(l_depth),l_depth[-1][0]); break
+            p,di,r = l_depth[-1]                        # unpack
+            l_k = list(self.d_tree[p].keys())           # list of keys
+            l_k.sort()
             if di >= len(l_k):                          # backtrack
                 l_depth.pop()
                 if not l_depth:                         # exhausted
                     break
-                l_depth[-1] = (l_depth[-1][0],l_depth[-1][1]+1,
-                               l_depth[-1][2])
+                l_depth[-1][1] += 1
                 continue
             cp = l_k[di]                                # new goal (coords')
             ch_circuit = False                          # check circuits
             for tpl in l_depth:
                 if tpl[0] == cp:
-                    l_depth[-1] = (p,di+1,r); ch_circuit = True; break
+                    l_depth[-1][1] += 1; ch_circuit = True
+                    break
             if ch_circuit:
                 continue
             d_p = self.d_tree[p][cp]                    # infos
             r = r+d_p['path']
             risk = self.mid.get_cost(r)
             if not d_p['end']:                          # depth-first
-                l_depth.append((cp,0,r)); continue
+                if len(l_depth) < 3:                    # Way... too... much...
+                    l_depth.append([cp,0,r])
+                else:
+                    l_depth[-1][1] += 1
+                continue
             nb_saved = len(l_depth)-1
             nb_saved = 0 if nb_saved < 0 else nb_saved
-            score = self.game.get_score(cp,nb_saved)
+            score = self.mid.get_score(nb_saved)
             if self.utility(g_score,g_risk,score,risk): # better path
                 g_score,g_risk = score,risk
                 self.l_goal = []
                 for di2 in range(1,len(l_depth)):
                     self.l_goal.append(l_depth[di2][0])
                 self.l_goal.append(cp)
-                # print("YUP:",self.l_goal,nb_saved,score,risk) ## TRACK
+                log(f"YUP: {nb_saved} {score} {risk} {self.l_goal}") # TRACK
             else:
                 l_tmp = []
                 for di2 in range(1,len(l_depth)):
                     l_tmp.append(l_depth[di2][0])
-                # print("NOPE:",l_tmp,nb_saved,score,risk) ## TRACK
-            l_depth[-1] = (p,di+1,r)
+                log(f"NOPE: {nb_saved} {score} {risk} {l_tmp}") # TRACK
+            l_depth[-1][1] += 1
         # actions
     def start(self):
         """Starts the game."""
@@ -205,16 +219,16 @@ class TopAgent:
             if self.d_dat['end']:
                 break
             elif (not self.l_goal):                 # got trapped
-                print("Time to suicide.")
+                log("Time to suicide.")
                 self.mid.suicide()
-            print("Move end:",self.d_dat['joueur'],
-                  self.l_goal,self.d_dat['end']) ##TRACK
-        print(self.d_dat['score'])
+            log(f"Move end: {self.d_dat['joueur']} {self.l_goal} "+
+                f"{self.d_dat['end']}") # TRACK
+        log(f"{self.d_dat['score']}")
         return self.d_dat['score']
 
 if __name__ == "__main__":
     game = Game("20.json")               # game intance (with the GUI)
-    agent = TopAgent(game,lim=100,st=.2)
+    agent = TopAgent(game,lim=20,st=0.1)
     def thread_it():
         """A convoluted way to run the GUI and the agent at the same time."""
         thr = threading.Thread(target=agent.loop) # run loop
