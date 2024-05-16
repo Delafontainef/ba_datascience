@@ -54,7 +54,7 @@ class MidAgent:
             val = 1-(((gr-4.5)/gr)**danger)*gprob
         elif nb_c > 3:
             val = (1-((((gr-(2.5*nb_c)+(9/4))/gr)**danger)*
-                    (1-self.rec_cost(nb_c-4,gr,danger+1,gprob))))
+                    (1-self.rec_cost(nb_c-4,gr,danger+1,1))))
         return val
     def get_cost(self,l_path):               ## TODO: weigh path cost
         """Function to weigh the cost of a path.
