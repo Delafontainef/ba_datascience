@@ -1,13 +1,7 @@
-# generic
 numpy
 matplotlib
 pandas
-# legacy
-networkx
-openpyxl
-# machine learning
 scipy
 scikit-learn
 sklearn-crfsuite
-# saving
 joblib
