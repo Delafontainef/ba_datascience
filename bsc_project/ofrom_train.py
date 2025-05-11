@@ -44,7 +44,6 @@ from ofrom_gen import prep_sequ, Gen
 import matplotlib.pyplot as plt
 from scipy.stats import t as sci_t
 import numpy as np
-import threading as thr
 import multiprocessing as mp
 
     # Support #
@@ -142,14 +141,10 @@ def save_all(f, data):
 
     # Passive training #
     #------------------#
-def passive(lim=10000, loop=10, nb_batch=5, verbose=True, ch_graph=True):
+def passive(gen, lim=10000, loop=10, nb_batch=5, verbose=True, ch_graph=True):
     """Plots a single iterated passive training."""
     c, y, xm = 0, [], np.floor(lim/1000)
     start = time.time()
-    try:
-        gen.reset()
-    except Exception:
-        gen = _load_gen(verbose)
     prt("Starting loops...", verbose)
     for acc_score in gen.iter_passive(lim=lim, nb_batch=nb_batch):
         y.append(acc_score); c += 1
@@ -173,7 +168,7 @@ def save_passive(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
     start = time.time()
     gen = _load_gen(verbose)
     for a in range(it):
-        acc = passive(lim, loop, nb_batch, verbose, False)
+        acc = passive(gen, lim, loop, nb_batch, verbose, False)
         prt(f"Save {a+1}/{it}: {time.time()-start:.02f}s.", verbose)
         if lock:    # parallel processing
             with lock:
@@ -189,13 +184,10 @@ def prc_passive(**kwargs):
 
     # Active training #
     #-----------------#
-def get_active(ch_fixed=False, lim=10000, loop=10, nb_toks=10, g_toks=None):
+def get_active(gen, ch_fixed=False, lim=10000, loop=10, 
+               nb_toks=10, g_toks=None):
     """Common part between fixed/variable active training."""
     c, x, y, l_y = 0, [], [], [[] for a in range(nb_toks)]
-    try:
-        gen.reset()
-    except Exception:
-        gen = _load_gen(verbose)
     for acc_score in gen.iter_active(lim=lim, nb=nb_toks, 
                                      ch_fixed=ch_fixed, g_toks=g_toks):
         c += 1; x.append(c*10); y.append(acc_score)
@@ -207,7 +199,7 @@ def get_active(ch_fixed=False, lim=10000, loop=10, nb_toks=10, g_toks=None):
         if loop > 0 and c >= loop:
             break
     return x, y, l_y, [tok[0] for tok in l_toks]
-def active_fixed(lim=10000, loop=10, nb_toks=10, g_toks=None):
+def active_fixed(gen, lim=10000, loop=10, nb_toks=10, g_toks=None):
     """Plots a single (fixed tokens) active training."""
     x, y, l_y, l_lgd = get_active(True, lim, loop, nb_toks, g_toks)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
@@ -222,10 +214,9 @@ def active_fixed(lim=10000, loop=10, nb_toks=10, g_toks=None):
         ax[1].plot(x, vy, label=l_lgd[i])
     ax[1].legend()
     plt.show()
-    return x, y, l_y, l_lgd
-def active_variable(lim=10000, loop=10, nb_toks=10):
+def active_variable(gen, lim=10000, loop=10, nb_toks=10):
     """Plots a single (variable tokens) active training."""
-    x, y, l_y, l_lgd = get_active(False, lim, loop, nb_toks)
+    x, y, l_y, l_lgd = get_active(gen, False, lim, loop, nb_toks)
     plt.title("Active training (variable)")
     plt.xlabel("Token count (thousands)")
     plt.ylabel("Accuracy score")
@@ -237,12 +228,10 @@ def save_active_v(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
     """Saves a repeated active (variable) training at each iteration.
        'loop' < 0 exhausts all data."""
     start = time.time()
-    try:
-        gen.reset()
-    except Exception:
-        gen = _load_gen(verbose)
+    gen = _load_gen(verbose)
     for a in range(it):
-        x, acc, l_acc, l_toks = get_active(False, lim, loop, nb_toks, None)
+        x, acc, l_acc, l_toks = get_active(gen, False, lim, loop, 
+                                           nb_toks, None)
         prt(f"Save {a}/{it}: {time.time()-start:.02f}s.", verbose)
         if lock:    # parallel processing
             with lock:
