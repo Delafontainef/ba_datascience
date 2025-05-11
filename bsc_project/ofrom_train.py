@@ -171,6 +171,7 @@ def save_passive(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
     """Saves a repeated passive training at each iteration.
        'loop' < 0 exhausts all data."""
     start = time.time()
+    gen = _load_gen(verbose)
     for a in range(it):
         acc = passive(lim, loop, nb_batch, verbose, False)
         prt(f"Save {a+1}/{it}: {time.time()-start:.02f}s.", verbose)

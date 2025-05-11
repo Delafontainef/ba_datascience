@@ -296,7 +296,9 @@ class Gen:
                 return X, y                     # break
             a = strat(self.ind)
             nx, ny = self.files[a]
-            nw += len(nx); X = X+nx; y = y+ny
+            for s in nx:
+                nw += len(s)
+            X = X+nx; y = y+ny
         return X, y
     def sel_rand(self, lim=10000, X=[], y=[]):
         """Selects files randomly."""
