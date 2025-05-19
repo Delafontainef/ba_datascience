@@ -36,18 +36,18 @@ def _strat(state, ch):
         c = -1 if c > 5 else c
     elif state == 2: # low, mid/high
         s = random.randint(10, 100)
-        c = random.randint(100, 2000)
+        c = random.randint(100, 2001)
     elif state == 3: # mid, mid
         s = random.randint(100, 1000)
-        c = random.randint(100, 200)
+        c = random.randint(100, 201)
     else:           # io
-        s = random.randint(20, 201)
-        c = random.randint(2, 20)
+        s = random.randint(20, 501)
+        c = random.randint(2, 200)
         io = True if random.randint(0, 101) < 5 else False
     return state, {'size':s, 'cycle':c, 'io':str(io).lower()}
 
-def loop(t=60, rate=5., lim=100, switch=60, verbose=True):
-    """Keeps sending requests: tries to avoid overloading."""
+def loop(t=60, rate=5., switch=60, verbose=True):
+    """Keeps sending requests: rate depends on concurrent requests."""
     start, end, l_thr, state, ch = time.time(), 0., [], 0, False
     mid = 0
     with r.Session() as rs:
@@ -59,12 +59,6 @@ def loop(t=60, rate=5., lim=100, switch=60, verbose=True):
                 ch = False
             state, json = _strat(state, ch)
             l_thr = _clean(l_thr)
-            if len(l_thr) > lim: # limit on concurrent requests
-                if verbose:
-                    print(f"Waiting... {len(l_thr)}",
-                          end="          \r")
-                time.sleep(random.randint(1, 3))
-                continue
             l_thr.append(thr.Thread(target=requ,
                          args=(json, False, rs)))
             l_thr[-1].start()
@@ -83,12 +77,15 @@ def loop(t=60, rate=5., lim=100, switch=60, verbose=True):
             th.join()
     
 def main(argv):
-    t, ch_lim = 1200, 20.
+    """The lazy way to read system parameters."""
+    t, rate, switch = 1200, 20., 60
     if len(sys.argv) > 1:
         t = int(sys.argv[1])
     if len(sys.argv) > 2:
-        ch_lim = float(sys.argv[2])
-    loop(t, ch_lim)
+        rate = float(sys.argv[2])
+    if len(sys.argv) > 3:
+        switch = float(sys.argv[3])
+    loop(t, rate, switch) # start loop
 
 if __name__ == "__main__":
     main(sys.argv)
