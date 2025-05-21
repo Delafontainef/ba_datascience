@@ -193,15 +193,15 @@ def get_active(gen, ch_fixed=False, lim=10000, loop=10,
         c += 1; x.append(c*10); y.append(acc_score)
         for i in range(len(l_y)): # confidence scores
             l_y[i].append(gen.toks[i][1])
-        print(f"\tLoop: {c}")
+        print(f"\n\tLoop: {c}")
         for tok in gen.toks:
             print("\t", tok)
         if loop > 0 and c >= loop:
             break
-    return x, y, l_y, [tok[0] for tok in l_toks]
+    return x, y, l_y, [tok[0] for tok in gen.toks]
 def active_fixed(gen, lim=10000, loop=10, nb_toks=10, g_toks=None):
     """Plots a single (fixed tokens) active training."""
-    x, y, l_y, l_lgd = get_active(True, lim, loop, nb_toks, g_toks)
+    x, y, l_y, l_lgd = get_active(gen, True, lim, loop, nb_toks, g_toks)
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     ax[0].set_title("Active training (fixed)")
     ax[0].set_xlabel("Token count (thousands)")
@@ -247,6 +247,10 @@ def prc_active_v(**kwargs):
 
     # Main #
     #------#
+def regen(rf="code/ofrom_alt.joblib", wf="code/ofrom_gen.joblib"):
+    """Rebuilds the data used by Gen."""
+    gen = Gen(); gen.load_dataset("code/ofrom_alt.joblib")
+    gen.save("code/ofrom_gen.joblib")
 def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
     """Plot the accuracy after it has been generated/saved."""
     return _plt_ci(load_json(f), np.floor(lim/1000), alpha, title)
@@ -295,6 +299,9 @@ def _args(args):
     return d_args
 if __name__ == "__main__":
     kwargs = _args(sys.argv[1:])    # get kwargs
-    if (not 'func' in kwargs) or kwargs['func'] == None:
+    if ('func' in kwargs) and kwargs['func'] != None:
+        kwargs['func'](**kwargs)    # passive training by default
         sys.exit()
-    kwargs['func'](**kwargs)        # passive training by default
+    # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
+    gen = _load_gen()
+    active_fixed(gen, lim=1000, loop=5)

@@ -56,8 +56,8 @@ class Gen:
     Iterators only return accuracy. Token list and confidence dictionary
     are stored in properties."""
     
-    def __init__(self, f="", s=0, lim=-1, keep=[], mt=0.8, mf=0.2):
-        self.files, self.table = [], {}
+    def __init__(self, f="", s=0, lim=-1, keep=[], mt=1., mf=0.):
+        self.files, self.table, self.pos = [], {}, {}
             # operations
         self.rng = np.random.default_rng()
         self.conf = {}              # all tokens for current loop
@@ -75,8 +75,8 @@ class Gen:
     def _files_weight(self):      ## ACTIVE LEARNING STRATEGY
         """Calculates the file weight/cost."""
             # Rework the global token dictionary
-        ch_non, ch_pos = False, False
-        for tok, set_pos in self.conf.items():
+        for tok, set_pos in self.pos.items():
+            ch_non, ch_pos = False, False
             if len(set_pos) == 1:
                 ch_non = True
             for pos in set_pos:
@@ -87,67 +87,68 @@ class Gen:
             # Set file weights
         for i, row in self.table.iterrows(): # for each file...
             w, c, tot = 0., 0, 0
-            for tok, count in row['#weight'].items():   # for token type...
+            for tok, count in row.items():   # for token type...
+                if "#" in tok:
+                    continue
                 ch_non, ch_pos = self.conf[tok]; tot += count
                 if not ch_non:  # only problematic tokens corrected
                     c += count
                 if ch_pos:      # focus on selected 'PoS'
                     w += count
-                tot += count
-            row['#weight'] = w/tot
-            row['#cost'] = c
+            self.table.at[i, '#weight'] = w/tot
+            self.table.at[i, '#cost'] = c
         self.conf = {}
     def _by_files(self, f, s, lim):
         """Organizes the dataset by files.
            Fills the words data."""
-        on, files = "", []
-        table, tloc = {'#file':[], '#weight':[], '#cost':[]}, {}
-        self.conf, tmp = {}, {}
+        self.reset(); on = ""
+        self.files, self.table = [], {'#file':[], '#weight':[], '#cost':[]}
+        self.pos = {}
         if not os.path.isfile(f):       # no file to load
-            return files, table
+            return self.files, self.table
         for sequ in iter_sequ(f, s, lim):
             n = sequ[0]['file']         # current 'file'
             if on != n:                 # new 'file'
-                files.append([[],[]]); on = n
+                self.files.append([[],[]]); on = n
                 print(n, end=" "*40+"\r")
-                table['#file'].append(n)
-                if tmp:
-                    table['#weight'][-1] = tmp.copy()
-                table['#weight'].append(None); tmp =  {}
-                table['#cost'].append(0)
+                for col in self.table:
+                    self.table[col].append(0)
+                self.table['#file'][-1] = n
+                self.table['#weight'][-1] = None
             for i, d in enumerate(sequ):# for each word...
                 x, y = d['token'], d['pos']
-                if x not in tmp:        # add to local
-                    tmp[x] = 0
-                tmp[x] += 1
-                if x not in self.conf:  # add to global
-                    self.conf[x] = set()
-                self.conf[x].add(y)
+                if x not in self.pos:  # add to global
+                    self.pos[x] = set()
+                    self.table[x] = [0 for i in 
+                                     range(len(self.table['#file']))]
+                self.pos[x].add(y)
+                self.table[x][-1] += 1
             x, y = prep_sequ(sequ)
-            files[-1][0].append(x); files[-1][1].append(y)
-        if tmp:
-            table['#weight'][-1] = tmp
-        self.table = pd.DataFrame(table) # turn to DataFrame
+            self.files[-1][0].append(x); self.files[-1][1].append(y)
+        self.table = pd.DataFrame(self.table) # turn to DataFrame
         self._files_weight()
-        return files, self.table
+        return self.files, self.table
     def _tok_weight(self, i):     ## ACTIVE LEARNING STRATEGY
         """Calculates the token weight for file at index 'i'."""
         wt, wf, row = 0., 0., self.table.iloc[i]
-        for tok, conf in self.toks:
+        for tok, conf, _ in self.toks:
             wt += row[tok]*(1.-conf)
         return wt/len(self.toks)
     def _sel_toks(self, nb_toks): ## ACTIVE LEARNING STRATEGY
         """Selects next tokens for 'file' selection."""
-        l_toks = []
+        self.toks = []
         for tok, tpl in self.conf.items():
-            w = (1.-tpl[0])*tpl[1]     # confidence_score * nb_occurrences
-            if len(l_toks) < nb_toks:
-                l_toks.append((tok, tpl[0], w)); continue
-            for i, ntpl in enumerate(l_toks):
-                if w >= ntpl[2] or i-1 < 0:
+            w = (1.-tpl[0])*np.log(tpl[1]) # confidence_score * nb_occurrences
+            ch_in = True if len(self.toks) >= nb_toks else False
+            for i in range(len(self.toks)-1,-1,-1):
+                ow = self.toks[i][2]
+                if w < ow:
                     continue
-                l_toks[i-1] = (tok, tpl[0], w); break
-        return 
+                idx = 1 if ch_in == True else 0
+                self.toks = self.toks[idx:i+1]+[(tok,tpl[0],w)]+self.toks[i+1:]
+                ch_in = True; break
+            if not ch_in:
+                self.toks.insert(0, (tok, tpl[0], w))
     def _up_gtoks(self, ch_fixed, g_toks):
         """Updates 'g_toks' with new confidence scores."""
         if ch_fixed and g_toks:                 # keep g_toks
@@ -155,7 +156,7 @@ class Gen:
                 conf = self.conf[tpl[0]][0] if tpl[0] in self.conf else tpl[1]
                 # conf = np.mean(self.conf[tpl[0]]) if tpl[0] in self.conf \
                        # else tpl[1]
-                g_toks[a] = (tpl[0], conf)
+                g_toks[a] = (tpl[0], conf, tpl[2])
             self.toks = g_toks
         else:                                   # replace with l_toks
             g_toks = self.toks
@@ -168,16 +169,14 @@ class Gen:
         #------#
     def load_dataset(self, f="ofrom_alt.joblib", s=0, lim=-1):
         """Loads "raw" data and parses it."""
-        self.files, self.table = self._by_files(f, s, lim) if f else ([], None)
-        self.reset()
-        return self.files, self.table
+        return self._by_files(f, s, lim) if f else ([], None)
     def load_parsed(self, f="ofrom_gen.joblib"):
         """Loads the pre-parsed data."""
-        self.files, self.table = joblib.load(f); self.reset()
-        return self.files, self.table
-    def save(self):
+        self.files, self.table, self.pos = joblib.load(f); self.reset()
+        return self.files, self.table, self.pos
+    def save(self, f="ofrom_gen.joblib"):
         """Saves parsed data as a '.joblib' file."""
-        joblib.dump((self.files, self.table), "ofrom_gen.joblib", compress=5)
+        joblib.dump((self.files, self.table, self.pos), f, compress=5)
     def get_toks(self):
         """Wrapper for token list."""
         return self.toks
@@ -224,8 +223,8 @@ class Gen:
                     self.conf[tok] = (dw['confidence'], 1)
                     # self.conf[tok] = [dw['confidence']]
                 else:
-                    avg, c = self.conf[tok]; c += 1
-                    self.conf[tok] = ((avg+dw['confidence'])/c, c)
+                    avg, c = self.conf[tok]
+                    self.conf[tok] = (((avg*c)+dw['confidence'])/(c+1), c+1)
                     # self.conf[tok].append(dw['confidence'])
         self.k_conf.release()
     def train_batch(self, X, y, l_ind, ch_conf=True):
@@ -243,7 +242,7 @@ class Gen:
     def train(self, X, y, nb_batch=5, ch_conf=True):
         """Five-fold training/validation to cover the entire data.
            Returns the accuracy score (average)."""
-        l_sub = self.cross(X, nb_batch)
+        l_sub = self.cross(X, nb_batch); self.conf = {}
         l_thr = [a for a in range(nb_batch)]
         l_sc = [a for a in range(nb_batch)]
         for a in range(len(l_sub)):                         # multicore
@@ -327,16 +326,15 @@ class Gen:
            active learning stragegy."""
         self.reset(g_toks)
         if (not ch_fixed) or (not g_toks):      # variable tokens
-            X, y, acc = self._add_sequs([], [], lim, nb_toks)
-            g_toks = self._up_gtoks(ch_fixed, g_toks)
+            X, y, acc = self.it([], [], lim, nb_toks)
         else:                                   # fixed tokens
             X, y, acc = self.it([], [], lim, nb_toks, nb_batch, 
-                                self._conf_pick)
-            g_toks = self._up_gtoks(ch_fixed, g_toks)
+                                self.pick_conf)
+        g_toks = self._up_gtoks(ch_fixed, g_toks)
         yield acc
         while self.ind:                         # exhaust all files
-            X, y, acc = self.it(X, y, lim, nb_toks, nb_batch, self._conf_pick)
-            g_toks = self._up_gtok(ch_fixed, g_toks,)
+            X, y, acc = self.it(X, y, lim, nb_toks, nb_batch, self.pick_conf)
+            g_toks = self._up_gtoks(ch_fixed, g_toks)
             yield acc
 
 if __name__ == "__main__":
