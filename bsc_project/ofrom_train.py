@@ -80,7 +80,7 @@ def _wrap(fun, lv, i, *args):
 def _load_gen(verbose=True, **kwargs):
     """Load an instance of 'Gen' and loads the pre-parsed data."""
     start = time.time()
-    gen = Gen(f=""); gen.load_parsed("ofrom_gen.joblib")
+    gen = Gen(f=""); gen.load_parsed("code/ofrom_gen.joblib")
     prt(f"Parsed: {time.time()-start:.02f}s", verbose)
     return gen
 def _prc(target, kwargs):
@@ -185,7 +185,7 @@ def prc_passive(**kwargs):
     # Active training #
     #-----------------#
 def get_active(gen, ch_fixed=False, lim=10000, loop=10, 
-               nb_toks=10, g_toks=None):
+               nb_toks=10, g_toks=None, verbose=True):
     """Common part between fixed/variable active training."""
     c, x, y, l_y = 0, [], [], [[] for a in range(nb_toks)]
     for acc_score in gen.iter_active(lim=lim, nb=nb_toks, 
@@ -193,9 +193,10 @@ def get_active(gen, ch_fixed=False, lim=10000, loop=10,
         c += 1; x.append(c*10); y.append(acc_score)
         for i in range(len(l_y)): # confidence scores
             l_y[i].append(gen.toks[i][1])
-        print(f"\n\tLoop: {c}")
-        for tok in gen.toks:
-            print("\t", tok)
+        if verbose:
+            print(f"\n\tLoop: {c}")
+            for tok in gen.toks:
+                print("\t", tok)
         if loop > 0 and c >= loop:
             break
     return x, y, l_y, [tok[0] for tok in gen.toks]
@@ -231,7 +232,7 @@ def save_active_v(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
     gen = _load_gen(verbose)
     for a in range(it):
         x, acc, l_acc, l_toks = get_active(gen, False, lim, loop, 
-                                           nb_toks, None)
+                                           nb_toks, None, verbose=verbose)
         prt(f"Save {a}/{it}: {time.time()-start:.02f}s.", verbose)
         if lock:    # parallel processing
             with lock:
@@ -300,8 +301,8 @@ def _args(args):
 if __name__ == "__main__":
     kwargs = _args(sys.argv[1:])    # get kwargs
     if ('func' in kwargs) and kwargs['func'] != None:
-        kwargs['func'](**kwargs)    # passive training by default
+        kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
     # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
     gen = _load_gen()
-    active_fixed(gen, lim=1000, loop=5)
+    active_fixed(gen, lim=10000, loop=10)

@@ -138,7 +138,7 @@ class Gen:
         """Selects next tokens for 'file' selection."""
         self.toks = []
         for tok, tpl in self.conf.items():
-            w = (1.-tpl[0])*np.log(tpl[1]) # confidence_score * nb_occurrences
+            w = (1.-tpl[0])*np.log10(tpl[1]) # confidence_score*nb_occurrences
             ch_in = True if len(self.toks) >= nb_toks else False
             for i in range(len(self.toks)-1,-1,-1):
                 ow = self.toks[i][2]
