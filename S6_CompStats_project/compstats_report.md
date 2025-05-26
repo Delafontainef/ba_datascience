@@ -172,6 +172,28 @@ Everything shows that our residuals are normally distributed. What kurtosis is l
 All that remains is to evaluate the accuracy of our SARIMAX model. To do so we use the dataset we split before aggregation, predict the sale prices and use a mean square error (for a continuous value) as measurement.
 This returns a value of 2.1e-5 or close to zero, suggesting a fairly good model.
 
+## 5. Comparison with Linear Regression
+
+To assess the impact of using a time-series model, we compared our SARIMAX with a standard linear regression model (OLS) trained on the full dataset (no aggregation, no time features).
+
+The linear model used the top 5 predictors selected through ANOVA:
+- `OverallQual`, `GrLivArea`, `GarageCars`, `n_KitchenQual`, `TotalBsmtSF`
+and was trained using a 70/30 random split.
+
+### Results
+
+| Metric               | SARIMAX (agg. data) | OLS (raw data)     |
+|----------------------|---------------------|--------------------|
+| Observations         | 55                  | 1022               |
+| MSE (test set)       | **0.0030**          | 0.028              |
+| AIC                  | -137.8              | -590.7             |
+| Residual normality   | ✔️ (JB p = 0.14)     | ❌ (JB p ≈ 0.00)    |
+| Seasonality modeled  | ✔️ (lag=4)           | ❌                 |
+
+
+The SARIMAX model achieves **lower error** and **better residual properties**, despite fewer data points. This highlights the importance of capturing time dependencies when present.
+
+
 ## Conclusion
 
 The hardest parts are aggregation for the time series (2.1) and feature selection (3) where categorical variables especially prove hard to handle. We also encountered a bit of difficulty in interpreting our ACF/PACF in (2.1)
