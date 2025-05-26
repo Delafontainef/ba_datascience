@@ -1,4 +1,4 @@
-""" 10.05.2025
+""" 25.05.2025
 Simulates passive/active training.
 
 Supports command calls:
@@ -10,31 +10,29 @@ With supported functions:
              ('save_passive' function)
 - 'active': Tests active training.
             The strategy is hardcoded in the 'Gen' class.
-            ('save_active_v' function)
+            ('save_active' function)
 The list of parameters (args/kwargs) is in the '_args' function,
 along with their default values.
             
 When testing, we:
 - increment 'loop' times an initially empty subset 
   by batches of 'lim' tokens
-- train it 5 times in a cross-validation way and average the accuracy score
-- passive training selects the next batch at random
-- active training selects based on tokens' confidence level
+- train it and get an accuracy score
+- select the next batch:
+  passive) at random,
+  active)  by file with lowest average confidence score
 - we repeat that process 'it' times and save the accuracy each time 
   in file 'f'.
 
 When plotting, we load the saved accuracy and plot its average plus CI.
 
-Note: A version of active training exists with fixed tokens.
-      It was abandoned for obvious reasons but allowed plotting how a set
-      of tokens' confidence score evolved.
 Note: All training functions are in 'ofrom_crf'
       and handled by the 'Gen' class.
-Note: Attempts at multithreading have proved slower than a continuous
-      version. The cross-training is still handled by threads in 
-      the Gen class.
-Note: Tokens are grouped in 'sequ' (sequences) for CRF training.
-      Sequences are grouped in 'file', the minimal shared unit.
+Note: Attempts at parallel processing have proven slower
+      (threads, processes, pool).
+Note: Tokens are grouped in sequences for CRF training.
+      Sequences are grouped in files, the minimal shared unit.
+Note: hyperparameters for the CRF model are hard-coded.
 """
 
 import sys, os, re, time, json, joblib
@@ -52,8 +50,23 @@ def prt(txt, verbose=True):
     """Overwrites current line."""
     if verbose:
         print("\r"+" "*100+"\r"+txt, end="")
+def _plt(x, y, alpha=0.95, color="b", label="", ax=None):
+    """Plots a graph with a CI."""
+    my, cuy, cdy = [], [], []
+    for el in y:                    # manual build of mean +/- var
+        my.append(np.mean(el))
+        mod = np.std(el)/np.sqrt(len(el))
+        v_el = sci_t.interval(alpha, df=len(el)-1, loc=my[-1],
+                              scale=mod)
+        cuy.append(v_el[1])
+        cdy.append(v_el[0])
+    if ax:
+        ax.plot(x, my, color=color, linewidth=2, label=label)
+        ax.plot(x, cuy, linestyle='--', color=color, linewidth=1)
+        ax.plot(x, cdy, linestyle='--', color=color, linewidth=1)
+    return x, my, cuy, cdy
 def _plt_ci(y, xm, alpha, title, ch_graph=True):
-    """Plots for non-fixed CI functions."""
+    """Plots CI functions."""
     x = [(i+1)*xm for i in range(len(y))] # /!\ it > 0
     my, cuy, cdy = [], [], []
     for el in y:                    # manual build of mean +/- var
@@ -74,15 +87,10 @@ def _plt_ci(y, xm, alpha, title, ch_graph=True):
     title = title.replace(" ", "_").lower()+".png"
     plt.savefig(title)
     return x, my, cuy, cdy
+
 def _wrap(fun, lv, i, *args):
     """Wraps around a function for multi-threading/processing."""
     lv[i] = fun(*args)[0]
-def _load_gen(verbose=True, **kwargs):
-    """Load an instance of 'Gen' and loads the pre-parsed data."""
-    start = time.time()
-    gen = Gen(f=""); gen.load_parsed("code/ofrom_gen.joblib")
-    prt(f"Parsed: {time.time()-start:.02f}s", verbose)
-    return gen
 def _prc(target, kwargs):
     """Multiprocessing for 'save_x' functions."""
     start, mid, k_f, it = time.time(), 0., mp.Lock(), kwargs['it']
@@ -100,6 +108,47 @@ def _prc(target, kwargs):
         prt(f"Waiting on {i}/{it}: {mid:0.2f}s", verbose)
         prc.join()
     prt(f"Finished: {time.time()-start:.02f}s", verbose)
+def _load_gen(verbose=True, **kwargs):
+    """Load an instance of 'Gen' and loads the pre-parsed data."""
+    start = time.time()
+    gen = Gen(f=""); gen.load_parsed("code/ofrom_gen.joblib")
+    prt(f"Parsed: {time.time()-start:.02f}s", verbose)
+    return gen
+def _loop(strat, lim, loop, verbose, ch_graph, title):
+    """Common code for passive/active."""
+    c, y, xm = 0, [], np.floor(lim/1000)
+    start = time.time()
+    prt("Starting loops...", verbose)
+    for acc_score in strat(lim):
+        y.append(acc_score); c += 1
+        prt(f"\tloop {c}/{loop}: {time.time()-start:.02f}s", verbose)
+        start = time.time()
+        if loop > 0 and c >= loop:
+            break
+    if ch_graph:
+        x = [i*xm for i in range(len(y))]
+        plt.title(title)
+        plt.xlabel("Token count (thousands)")
+        plt.ylabel("Accuracy score")
+        plt.plot(x, y)
+        plt.show()
+    return y
+def _sloop(strat, lim, it, loop, verbose, ch_graph, alpha, f, lock, title):
+    """Common code for save_passive/active."""
+    start = time.time()
+    gen = _load_gen(verbose)
+    for a in range(it):
+        acc = strat(gen, lim, loop, verbose, False)
+        prt(f"Save {a+1}/{it}: {time.time()-start:.02f}s., {gen.s} tokens", 
+            verbose)
+        if lock:    # parallel processing
+            with lock:
+                save_acc(f, acc)
+        else:       # single use
+            save_acc(f, acc)
+    if ch_graph:
+        acc = load_acc(f)
+        _plt_ci(acc, np.floor(lim/1000), alpha, title)
 
     # Json #
     #------#
@@ -141,110 +190,35 @@ def save_all(f, data):
 
     # Passive training #
     #------------------#
-def passive(gen, lim=10000, loop=10, nb_batch=5, verbose=True, ch_graph=True):
+def passive(gen, lim=10000, loop=10, verbose=True, ch_graph=True):
     """Plots a single iterated passive training."""
-    c, y, xm = 0, [], np.floor(lim/1000)
-    start = time.time()
-    prt("Starting loops...", verbose)
-    for acc_score in gen.iter_passive(lim=lim, nb_batch=nb_batch):
-        y.append(acc_score); c += 1
-        prt(f"\tloop {c}/{loop}: {time.time()-start:.02f}s", verbose)
-        start = time.time()
-        if loop > 0 and c >= loop:
-            break
-    if ch_graph:
-        x = [i*xm for i in range(len(y))]
-        plt.title("Passive accuracy")
-        plt.xlabel("Token count (thousands)")
-        plt.ylabel("Accuracy score")
-        plt.plot(x, y)
-        plt.show()
-    return y
-def save_passive(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
-                 verbose=True, ch_graph=False, f="passive_acc.json",
-                 lock=None, **kwargs):
+    return _loop(gen.iter_passive, lim, loop, verbose, 
+                 ch_graph, "Passive accuracy")
+def save_passive(lim=10000, it=10, loop=10, verbose=True, ch_graph=False, 
+                 alpha=0.95, f="passive_acc.json", lock=None, **kwargs):
     """Saves a repeated passive training at each iteration.
        'loop' < 0 exhausts all data."""
-    start = time.time()
-    gen = _load_gen(verbose)
-    for a in range(it):
-        acc = passive(gen, lim, loop, nb_batch, verbose, False)
-        prt(f"Save {a+1}/{it}: {time.time()-start:.02f}s.", verbose)
-        if lock:    # parallel processing
-            with lock:
-                save_acc(f, acc)
-        else:       # single use
-            save_acc(f, acc)
-    if ch_graph:
-        acc = load_acc(f)
-        _plt_ci(acc, np.floor(lim/1000), alpha, "Passive training")
+    _sloop(passive, lim, it, loop, verbose, ch_graph, alpha, f, lock,
+           "Passive training")
 def prc_passive(**kwargs):
     """Multiprocessing over 'save_passive'."""
     _prc(save_passive, kwargs)
 
     # Active training #
     #-----------------#
-def get_active(gen, ch_fixed=False, lim=10000, loop=10, 
-               nb_toks=10, g_toks=None, verbose=True):
-    """Common part between fixed/variable active training."""
-    c, x, y, l_y = 0, [], [], [[] for a in range(nb_toks)]
-    for acc_score in gen.iter_active(lim=lim, nb=nb_toks, 
-                                     ch_fixed=ch_fixed, g_toks=g_toks):
-        c += 1; x.append(c*10); y.append(acc_score)
-        for i in range(len(l_y)): # confidence scores
-            l_y[i].append(gen.toks[i][1])
-        if verbose:
-            print(f"\n\tLoop: {c}")
-            for tok in gen.toks:
-                print("\t", tok)
-        if loop > 0 and c >= loop:
-            break
-    return x, y, l_y, [tok[0] for tok in gen.toks]
-def active_fixed(gen, lim=10000, loop=10, nb_toks=10, g_toks=None):
-    """Plots a single (fixed tokens) active training."""
-    x, y, l_y, l_lgd = get_active(gen, True, lim, loop, nb_toks, g_toks)
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    ax[0].set_title("Active training (fixed)")
-    ax[0].set_xlabel("Token count (thousands)")
-    ax[0].set_ylabel("Accuracy score")
-    ax[1].set_title("Token confidence score")
-    ax[1].set_xlabel("Token count (thousands)")
-    ax[1].set_ylabel("Confidence score")
-    ax[0].plot(x, y)
-    for i, vy in enumerate(l_y):
-        ax[1].plot(x, vy, label=l_lgd[i])
-    ax[1].legend()
-    plt.show()
-def active_variable(gen, lim=10000, loop=10, nb_toks=10):
+def active(gen, lim=10000, loop=10, verbose=True, ch_graph=True):
     """Plots a single (variable tokens) active training."""
-    x, y, l_y, l_lgd = get_active(gen, False, lim, loop, nb_toks)
-    plt.title("Active training (variable)")
-    plt.xlabel("Token count (thousands)")
-    plt.ylabel("Accuracy score")
-    plt.plot(x, y)
-    plt.show()
-def save_active_v(lim=10000, it=10, loop=10, alpha=0.95, nb_batch=5,
-                  nb_toks=10, verbose=True, ch_graph=True,
-                  f="active_acc.json", lock=None, **kwargs):
+    return _loop(gen.iter_active, lim, loop, verbose,
+                 ch_graph, "Active accuracy")
+def save_active(lim=10000, it=10, loop=10, alpha=0.95, verbose=True, 
+                ch_graph=True, f="active_acc.json", lock=None, **kwargs):
     """Saves a repeated active (variable) training at each iteration.
        'loop' < 0 exhausts all data."""
-    start = time.time()
-    gen = _load_gen(verbose)
-    for a in range(it):
-        x, acc, l_acc, l_toks = get_active(gen, False, lim, loop, 
-                                           nb_toks, None, verbose=verbose)
-        prt(f"Save {a}/{it}: {time.time()-start:.02f}s.", verbose)
-        if lock:    # parallel processing
-            with lock:
-                save_acc(f, acc)
-        else:       # single use
-            save_acc(f, acc)
-    if ch_graph:
-        acc = load_acc(f)
-        _plt_ci(acc, np.floor(lim/1000), alpha, "Active training (variable)")
-def prc_active_v(**kwargs):
+    _sloop(active, lim, it, loop, verbose, ch_graph, alpha, f, lock,
+           "Active training")
+def prc_active(**kwargs):
     """Multiprocessing over 'save_active_v'."""
-    _prc(save_active_v, kwargs)
+    _prc(save_active, kwargs)
 
     # Main #
     #------#
@@ -255,6 +229,27 @@ def regen(rf="code/ofrom_alt.joblib", wf="code/ofrom_gen.joblib"):
 def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
     """Plot the accuracy after it has been generated/saved."""
     return _plt_ci(load_json(f), np.floor(lim/1000), alpha, title)
+def plot_all(l_f=[], alpha=0.95):
+    """Plots a graph with both learning curves."""
+    l_f = [
+        "json/passive_10k_10.json", "json/active_10k_10.json",
+        "json/passive_100k_10.json", "json/active_100k_10.json"
+    ] if not l_f else l_f
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    for a in range(0, 2):
+        lim = 10**(a+4)
+        y1, y2 = load_json(l_f[a*2]), load_json(l_f[(a*2)+1])
+        ln = max(len(y1), len(y2))
+        lm = min(len(y1[0]), len(y2[0]))
+        x = [(i+1)*np.floor(lim/1000) for i in range(ln)]
+        _plt(x, y1, alpha, 'b', "passive", ax[a])
+        _plt(x, y2, alpha, 'r', "active", ax[a])
+        ax[a].set_title(f"Comparison ({10**(a+1)}k)")
+        ax[a].set_xlabel("Token count (thousands)")
+        ax[a].set_ylabel(f"Accuracy score ({lm})")
+        ax[a].legend()
+    fig.tight_layout()
+    plt.savefig("img/summary.png")
     
 def _typ(v):
     """Converts type the old way."""
@@ -277,16 +272,15 @@ def _args(args):
     d_func = {
         'plot': plot_acc,
         'passive': save_passive,
-        'active': save_active_v
+        'active': save_active
     }
-    l_args = ['func', 'lim', 'it', 'loop', 'alpha', 'nb_batch',
-              'verbose', 'ch_graph', 'nb_toks', 'g_toks',
+    l_args = ['func', 'lim', 'it', 'loop', 'alpha', 
+              'verbose', 'ch_graph', 
               'f', 'title'] # key list
     d_args = {
         'func': None,
-        'lim': 1000, 'it': 10, 'loop': 100, 'alpha': 0.95, 'nb_batch': 5,
+        'lim': 1000, 'it': 10, 'loop': 100, 'alpha': 0.95, 
         'verbose': True, 'ch_graph': False,
-        'nb_toks': 10, 'g_toks': None,
         'f': "passive_acc.json", "title": "Training"
     }                   # default values
     for a, arg in enumerate(args):
@@ -303,6 +297,5 @@ if __name__ == "__main__":
     if ('func' in kwargs) and kwargs['func'] != None:
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
-    # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
-    gen = _load_gen()
-    active_fixed(gen, lim=10000, loop=10)
+    regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
+    # plot_all([], 0.95)

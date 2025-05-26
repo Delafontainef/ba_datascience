@@ -1,5 +1,4 @@
 import numpy as np
-import sklearn as sk
 import scipy
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn_crfsuite.estimator import CRF
@@ -38,7 +37,7 @@ def test_crf(dat_f, tag_f):
     data_save(dat_f, X, y); save_tags(tag_f, tags)
     X_tr, X_te, y_tr, y_te = train_test_split(X, y, train_size=0.8)
     
-    crf = sk_crf.CRF()
+    crf = CRF()
     params_space = {
         'c1': scipy.stats.expon(scale=0.5),
         'c2': scipy.stats.expon(scale=0.05)
