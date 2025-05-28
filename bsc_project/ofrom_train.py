@@ -38,10 +38,10 @@ Note: hyperparameters for the CRF model are hard-coded.
 import sys, os, re, time, json, joblib
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)),
                 'code')) # ...
-from ofrom_gen import prep_sequ, Gen
-import matplotlib.pyplot as plt
+from ofrom_gen import Gen
 from scipy.stats import t as sci_t
 import numpy as np
+import matplotlib.pyplot as plt
 import multiprocessing as mp
 
     # Support #
@@ -232,8 +232,8 @@ def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
 def plot_all(l_f=[], alpha=0.95):
     """Plots a graph with both learning curves."""
     l_f = [
-        "json/passive_10k_10.json", "json/active_10k_10.json",
-        "json/passive_100k_10.json", "json/active_100k_10.json"
+        "json/passive_10k_10.json", "json/alt_10k_10.json",
+        "json/passive_100k_10.json", "json/alt_100k_10.json"
     ] if not l_f else l_f
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     for a in range(0, 2):
@@ -297,5 +297,5 @@ if __name__ == "__main__":
     if ('func' in kwargs) and kwargs['func'] != None:
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
-    regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
-    # plot_all([], 0.95)
+    # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
+    plot_all([], 0.95)
