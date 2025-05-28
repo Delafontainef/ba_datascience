@@ -229,11 +229,11 @@ def regen(rf="code/ofrom_alt.joblib", wf="code/ofrom_gen.joblib"):
 def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
     """Plot the accuracy after it has been generated/saved."""
     return _plt_ci(load_json(f), np.floor(lim/1000), alpha, title)
-def plot_all(l_f=[], alpha=0.95):
+def plot_all(l_f=[], alpha=0.95, name="alt"):
     """Plots a graph with both learning curves."""
     l_f = [
-        "json/passive_10k_10.json", "json/alt_10k_10.json",
-        "json/passive_100k_10.json", "json/alt_100k_10.json"
+        "json/passive_10k_10.json", f"json/{name}_10k_10.json",
+        "json/passive_100k_10.json", f"json/{name}_100k_10.json"
     ] if not l_f else l_f
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     for a in range(0, 2):
@@ -298,4 +298,4 @@ if __name__ == "__main__":
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
     # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
-    plot_all([], 0.95)
+    plot_all([], 0.95, "pos")

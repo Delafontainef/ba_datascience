@@ -140,13 +140,13 @@ class Gen:
         self.table = pd.DataFrame(self.table) # turn to DataFrame
         self._files_weight()
         return self.files, self.table, self.pos, self.ref
-    def _iter_tok(self, nx, ch_e=False):
+    def _iter_tok(self, nx):
         """Iterates over tokens."""
         c = 0
         for s in nx:
             for w in s:
                 w = w['token']
-                yield w if not ch_e else c, w
+                yield c, w
                 c += 1
     def _pred_files(self): ## ACTIVE LEARNING STRATEGY
         """Fills 'self.prf' for '_pick_conf'."""
@@ -157,7 +157,7 @@ class Gen:
             x_te, y_te = self.files[i]             # file content
             _, y_tmp = self.pred(x_te, y_te, ch_acc=False) # confidence scores
             y_cnf = []
-            for j, w in self._iter_tok(x_te, True): # check pos/acc
+            for j, w in self._iter_tok(x_te):      # check pos/acc
                 ch_non, ch_pos = self._ch_pos(w)
                 if (not ch_pos) or (y_tmp[j] >= self.acc):
                     continue
@@ -182,15 +182,17 @@ class Gen:
                     conf[w] = []
                 conf[w].append(y_tpl[a]['confidence'])
         for w, l_cnf in conf.items():               # average all
-            conf[w] = np.log10(len(l_cnf))*np.mean(l_cnf)
+            conf[w] = np.log10(len(l_cnf))*(1-np.mean(l_cnf))
         for a in range(10):                         # hardcoded nb_tokens
-            w = min(conf, key=conf.get)
+            w = max(conf, key=conf.get)
             self.prf[w] = conf.pop(w)
         if len(self.table.columns.values) > 5:      # table has tokens
             return
         d_add = {}
+        deb1, deb2 = -1, 0
         for i, file in enumerate(self.files):       # count occurrences
-            for w in self._iter_tok(file[0]):
+            deb1 += 1; deb2 = 0
+            for j, w in self._iter_tok(file[0]):
                 if w not in d_add:
                     d_add[w] = [0 for i in range(len(self.files))]
                 d_add[w][i] += 1
@@ -271,16 +273,16 @@ class Gen:
     def _pick_toks(self):
         """Picks based on token confidence.
            Assumes 'self.crf' is set."""
-        gi, gw = -1, -1.
-        for i in self._ind:                 # for each file...
+        ga, gw = -1, -1.
+        for a, i in enumerate(self._ind):   # for each file...
             lw, row = [], self.table.iloc[i]
             cf = row['#cost']
             for w in self.prf:              # nb_occ * avg_conf_score
                 lw.append(row[w]*self.prf[w])
             lw = np.mean(lw) # / cf         # average
             if lw > gw:
-                gi, gw = i, lw
-        v = self._ind.pop(gi)
+                ga, gw = a, lw
+        v = self._ind.pop(ga)
         return v
         
     def select(self, strat=None, X=[], y=[], lim=10000):
@@ -324,10 +326,100 @@ class Gen:
         X, y, acc = self.it([], [], lim, self._pick_rand)
         yield acc
         while self._ind:
-            X, y, acc = self.it(X, y, lim, self._pick_conf) # self._pick_toks)
+            X, y, acc = self.it(X, y, lim, self._pick_toks) # self._pick_conf)
             yield acc
 
+    # Simulation #
+    #------------#
+class Sim:
+    """Simulates data to test 'Gen'."""
+    def __init__(self):
+        self.fixed = {
+            'a':'A', 'b':'A',
+            'c':'B', 'd':'B',
+            'e':'C', 'f':'C',
+            'g':'D', 'h':'D',
+            'i':'A', 'j':'B'
+        }
+        self.voc = list(self.fixed.keys())
+        self.dat = []
+        
+        # Tokens #
+        #--------#
+    def pos_dep(self, w, pos):
+        """Predictable data by position."""
+        if w in ['a', 'b'] and pos == 0:
+            return 'A'
+        elif w in ['c', 'd'] and pos == 1:
+            return 'B'
+        elif w in ['e', 'f'] and pos == 2:
+            return 'C'
+        elif w in ['g', 'h'] and pos == 3:
+            return 'D'
+        elif w in ['i', 'j'] and pos == 4:
+            return 'A'
+        else:
+            return self.fixed[w]
+    def unpred(self):
+        """Unpredictable label."""
+        return np.random.choice(['A', 'B', 'C', 'D'], p=[.35, .25, .25, .15])
+    
+        # Structures #
+        #------------#
+    def sequ(self, typ="simple"):
+        """Generates a fake sequence."""
+        l_w, l_p = [np.random.choice(self.voc) for _ in range(5)], []
+        for i, w in enumerate(l_w):
+            r = np.random.random()
+            if typ == "simple":
+                if r < 0.15:
+                    l = self.pos_dep(w, i)
+                else:
+                    l = self.fixed[w]
+            elif r < 0.7:
+                l = self.fixed[w]
+            elif r < 0.85:
+                l = self.pos_dep(w, i)
+            else:
+                l = self.unpred()
+            l_p.append(l)
+        return l_w, l_p
+    def file(self, n_sequ=200, typ="simple"):
+        """Generates a fake file."""
+        r = np.random.randint(200, 2801)
+        f, c = [[], []], 0
+        for a in range(n_sequ):
+            l_w, l_p = self.sequ(typ)
+            f[0].append(l_w); f[1].append(l_w); c = c+5
+        return f, c
+    def data(self):
+        """Generates a fake dataset."""
+        self.dat, gn = [], 0
+        while gn < 2000000:
+            n_sequ = np.random.randint(200, 800)
+            typ = "simple" if np.random.random() <= 0.7 else "complex"
+            file, c = self.file(n_sequ, typ)
+            self.dat.append(file); gn += c
+        return self.dat
+        
+        # joblib #
+        #--------#
+    def tobase(self, wf="alt.joblib"):
+        """Save as joblib file."""
+        l_dat = []
+        for a, file in enumerate(self.dat):
+            fname = f"a{a}"
+            for b, sequ in enumerate(file[0]):
+                for c, w in enumerate(sequ):
+                    l_dat.append(
+                        {'file':fname, 'speaker':'spk', 'start':0., 'end':0.,
+                         'token':w, 'pos':file[1][b][c]}
+                    )
+            l_dat.append(
+                {'file':fname, 'speaker':'spk', 'start':0., 'end':10.,
+                 'token':'_', 'pos':file[1][b][c]}
+            )
+        joblib.dump(l_dat, wf, compress=5)
+
 if __name__ == "__main__":
-    gen = Gen()
-    gen.load_dataset()
-    gen.save()
+    sim = Sim(); sim.data(); sim.tobase()
