@@ -1,4 +1,41 @@
-from ofrom_crf import train, predict_one, acc_score
+""" 29.05.2025
+'Sim' was in development and abandoned.
+      It was meant for data simulation, to test the 'Gen' class.
+'Gen' contains all the relevant code.
+
+Gen methods:
+- __init__/load_dataset: load and parse the original data using 'iter_sequ'.
+- load_parsed: load pre-parsed data, ready for use
+- reset: called before iterating, also sets aside the reference dataset
+- iter_passive/active: main method to iterate
+|- select: selects the next files, up to 'lim' tokens, to add to the subset
+|          uses a 'strategy' (another method like '_pick_rand')
+|- tr:   trains the model on the subset
+|- pred: evaluates the trained model on the reference dataset
+
+Strategies:
+- _pick_rand:    selects a file at random
+- _pick_conf:    selects the file with the lowest confidence score
+|- _pred_files:  sets the average confidence scores for that selection
+- _pick_tok:     selects the file based on a set of tokens
+|- _pred_tokens: sets those tokens and their average confidence scores
+
+More methods:
+- decompose: turns the parsed data into a sequence per file
+- get_ft:    fills 'self.tok' for positional features
+- add_ft:    before training, adds features to the model
+
+Note: A lot of parameters have been hardcoded.
+      1) there is no iterator for a token strategy (it's not meant to exist)
+      2) there is no parameter to choose whether to add features
+      3) when using a decomposed dataset, limiting its size should be done
+         and then done by hand (in 'self.reset()' or during decompose).
+      This is not exhaustive.
+Note: CRF methods are imported from 'ofrom_crf.py'.
+      This script should contain no scikit-learn operation directly.
+"""
+
+from ofrom_crf import train, predict_one, acc_score, add_ft, rem_ft
 import pandas as pd
 import numpy as np
 import os, re, time, json, joblib
@@ -49,15 +86,17 @@ def iter_sequ(f="ofrom_alt.joblib", s=0, lim=-1, ch_prep=False):
     if l_tmp:                           # last loop
         yield prep_sequ(l_tmp) if ch_prep else l_tmp
 
+    # Iterator #
+    #----------#
 class Gen:
     """Handles 'file' partition of the dataset and training iteration.
     
-    Iterators only return accuracy. Token list and confidence dictionary
-    are stored internally."""
+    At its core, it's a list of files and a list containing their indexes.
+    For iteration, that list is popped each time a file is selected.
+    """
     
-    def __init__(self, f="", s=0, lim=-1, keep=[], mt=1., mf=0., mc=0.):
+    def __init__(self, f="", s=0, lim=-1, keep=[], mt=1., mf=0., mc=1.):
             # operations
-        self.rng = np.random.default_rng()
         self.keep = ['ADV', 'CON', 'DET', 'PRO', 'PRP'] if not keep else keep
             # data
         self.files, self.table, self.pos, self.ref = [], {}, {}, []
@@ -68,9 +107,15 @@ class Gen:
         self.acc = -1.                      # model accuracy
         self.prf = []                       # prediction for active learning
         self.mt, self.mf, self.mc = mt, mf, mc # weights for formula
+            # features
+        self.tok = None                     # positional features
+        self.cont = ['p1', 'p2', 'p3', 's1', 's2', 's3']
         
         # Private methods #
         #-----------------#
+    def _wrap(func, l_res, i, args):
+        """Wraps around a function, puts result in shared list."""
+        l_res[i] = func(*args)
     def _ch_pos(self, tok):
         """Checks a token's state (non-problematic, grammatical)."""
         set_pos = self.pos[tok]
@@ -101,6 +146,7 @@ class Gen:
                     c += count
                 if ch_pos:      # focus on selected 'PoS'
                     w += count
+            tot = 1 if tot == 0 else tot
             self.table.at[i, '#weight'] = w/tot
             self.table.at[i, '#cost'] = c
             minc = c if c < minc else minc
@@ -109,6 +155,7 @@ class Gen:
         self.table['#cost'] = self.table['#cost'].astype(float)
         for i, row in self.table.iterrows(): # standardize cost
             c = self.table.at[i, '#cost']
+            div = 1 if (maxc-minc) == 0 else (maxc-minc)
             self.table.at[i, '#cost'] = (c-minc)/(maxc-minc)
         self.table['#cost'] = self.table['#cost'].clip(1e-6) # avoid 0.
     def _by_files(self, f, s, lim):
@@ -140,6 +187,12 @@ class Gen:
         self.table = pd.DataFrame(self.table) # turn to DataFrame
         self._files_weight()
         return self.files, self.table, self.pos, self.ref
+    def _iter_all(self):
+        """Iterates over the entire dataset."""
+        for nx, ny in self.files:
+            for i, sx in enumerate(nx):
+                for j, dw in enumerate(sx):
+                    yield nx, i, j, dw, ny[i][j]
     def _iter_tok(self, nx):
         """Iterates over tokens."""
         c = 0
@@ -156,16 +209,16 @@ class Gen:
             wf, cf = row['#weight'], row['#cost']  # file metadata
             x_te, y_te = self.files[i]             # file content
             _, y_tmp = self.pred(x_te, y_te, ch_acc=False) # confidence scores
-            y_cnf = []
-            for j, w in self._iter_tok(x_te):      # check pos/acc
-                ch_non, ch_pos = self._ch_pos(w)
-                if (not ch_pos) or (y_tmp[j] >= self.acc):
-                    continue
-                y_cnf.append(y_tmp[j])
-            # y_cnf = [yi for yi in y_tmp if yi < self.acc] # cutoff point
+            # y_cnf = []
+            # for j, w in self._iter_tok(x_te):      # check pos/acc
+                # ch_non, ch_pos = self._ch_pos(w)
+                # if (not ch_pos) or (y_tmp[j] >= self.acc):
+                    # continue
+                # y_cnf.append(y_tmp[j])
+            y_cnf = [yi for yi in y_tmp if yi < self.acc] # cutoff point
             wt = np.mean(y_cnf) if len(y_cnf) > 1 else 0. # token weight
             cf = 1. if (cf*self.mc) <= 1e-6 else (cf*self.mc) # avoid zero
-            w = (((1-wt)*self.mt)+(wf*self.mf))/cf # formula
+            w = (((1-wt)*self.mt)+(wf*self.mf))*cf # formula
             self.prf[a] = w                        # store
     def _pred_tokens(self, x_te=[], y_te=[]): ## ACTIVE LEARNING STRATEGY
         """Fills 'self.prf' for '_pick_toks'."""
@@ -226,6 +279,74 @@ class Gen:
                 for w in sequ:
                     n_tok += 1
         return n_file, n_sequ, n_tok
+    def decompose(self, wf="", nb_toks=5):
+        """Make as many files as there are sequences.
+           Cut the sequences into units of max 'nb_toks' tokens."""
+        def _tofile(files, table, s, l):
+            files.append([[s], [l]])
+            for k in table:
+                table[k].append(0)
+            return files, table
+        
+        files, table = [], {k:[] for k in self.table}
+        for i in range(len(self.files)):        # for each file...
+            x, y = self.files[i]
+            print(self.table.at[i, '#file'], end=" "*40+"\r")
+            for a, sequ in enumerate(x):        # for each sequence...
+                lsequ = y[a]
+                while len(sequ) > nb_toks:      # no more than nb_toks tokens
+                    s, sequ = sequ[:nb_toks], sequ[nb_toks:]
+                    l, lsequ = lsequ[:nb_toks], lsequ[nb_toks:]
+                    files, table = _tofile(files, table, s, l)
+                if len(sequ) > 0:
+                    files, table = _tofile(files, table, sequ, lsequ)
+        for i in table['#file']:
+            table['#file'][i] = f"f{i}"
+            table['#weight'][i] = None
+        self.files = files
+        self.table = pd.DataFrame(table)
+        self._files_weight()
+        if wf:
+            self.save(wf)
+    def add_ft(self):
+        """How about some madness?"""
+        def _cot(x, i, w, p, ft, tok):
+            """Positional code for 'self._ft()'."""
+            pw = x[i][p]['token']
+            if pw in tok[w][ft]:               # already in
+                tok[w][ft][pw] += 1
+            elif len(tok[w][ft]) < 100:        # limited space
+                tok[w][ft][pw] = 1
+            return tok
+        
+        tok = {}   # features
+        d_ind = {}; mid = len(self.cont)//2
+        for x, i, j, dw, pos in self._iter_all():   # for each token
+            w = dw['token']
+            if w not in tok:                        # add to table
+                tok[w] = {k:{} for k in self.cont}
+            for b in range(mid):                    # left cotext
+                p, ft = j-(b+1), self.cont[b]
+                if p < 0:
+                    continue
+                tok = _cot(x, i, w, p, ft, tok)
+            for b in range(mid):                    # right cotext
+                p, ft = j+(b+1), self.cont[mid+b]
+                if p >= len(x[i]):
+                    continue
+                tok = _cot(x, i, w, p, ft, tok)
+        for w in tok:
+            for k in self.cont:
+                while len(tok[w][k]) > 10:
+                    mw = min(tok[w][k], key=tok[w][k].get)
+                    tok[w][k].pop(mw)
+        for x, i, j, dw, y in self._iter_all():
+            x[i][j] = add_ft(dw, x, i, j, w, tok, pos=self.pos,
+                             idx="token", cont=self.cont)
+    def rem_ft(self):
+        """Remove all features but 'token'."""
+        for i, tpl in enumerate(self.files):
+            self.files[i][0] = rem_ft(tpl[0], ['token'])
     
         # Training #
         #----------#
@@ -248,12 +369,22 @@ class Gen:
         """Returns an accuracy score."""
         self.tr(X, y)
         return self.pred(*self.ref)
+    def optimize(self, lim=100000):
+        """First batch is random, next by active learning strategy."""
+        from ofrom_crf import test_crf
+        self.reset()
+        X, y = self.select(self._pick_rand, lim=lim)
+        test_crf(X, y)
     
         # 'File' selection #
         #------------------#
     def reset(self, l_toks=[]):
         """Resets the selection list. Gets a reference subset.
            Hardcoded to 100,000 tokens."""
+        # if len(self.files) > 50000: # FAKE code
+            # self.files = self.files[:500001]
+        # self.add_ft()
+        # print("Featured.", end=" "*40+"\r")
         self._ind = [i for i in range(len(self.files))]
         x, y = self.select(self._pick_rand, lim=100000)
         self.ref, self.s = [x, y], 0
@@ -284,7 +415,6 @@ class Gen:
                 ga, gw = a, lw
         v = self._ind.pop(ga)
         return v
-        
     def select(self, strat=None, X=[], y=[], lim=10000):
         """Generic 'file' selection function. User can define the strategy.
            Defaults to random."""
@@ -326,7 +456,7 @@ class Gen:
         X, y, acc = self.it([], [], lim, self._pick_rand)
         yield acc
         while self._ind:
-            X, y, acc = self.it(X, y, lim, self._pick_toks) # self._pick_conf)
+            X, y, acc = self.it(X, y, lim, self._pick_conf) # self._pick_toks)
             yield acc
 
     # Simulation #

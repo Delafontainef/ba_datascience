@@ -1,8 +1,8 @@
-""" 25.05.2025
+""" 29.05.2025
 Simulates passive/active training.
 
 Supports command calls:
-    python test.py function [parameters]
+    python test.py function [args/kwargs]
 With supported functions:
 - 'plot': Plots the accuracy based on a pre-saved json file.
           ('plot_acc' function)
@@ -19,20 +19,18 @@ When testing, we:
   by batches of 'lim' tokens
 - train it and get an accuracy score
 - select the next batch:
-  passive) at random,
-  active)  by file with lowest average confidence score
+|- passive) at random,
+|- active)  by file with lowest average confidence score
 - we repeat that process 'it' times and save the accuracy each time 
   in file 'f'.
 
 When plotting, we load the saved accuracy and plot its average plus CI.
 
-Note: All training functions are in 'ofrom_crf'
-      and handled by the 'Gen' class.
+Note: Anything about scikit-learn should be in 'ofrom_crf.py'.
+      Anything about the data itself should be in 'ofrom_gen.py'.
+      This script should be purely for looping and plotting.
 Note: Attempts at parallel processing have proven slower
       (threads, processes, pool).
-Note: Tokens are grouped in sequences for CRF training.
-      Sequences are grouped in files, the minimal shared unit.
-Note: hyperparameters for the CRF model are hard-coded.
 """
 
 import sys, os, re, time, json, joblib
@@ -233,19 +231,26 @@ def plot_all(l_f=[], alpha=0.95, name="alt"):
     """Plots a graph with both learning curves."""
     l_f = [
         "json/passive_10k_10.json", f"json/{name}_10k_10.json",
-        "json/passive_100k_10.json", f"json/{name}_100k_10.json"
+        "json/passive_100k_10.json", f"json/{name}_100k_10.json",
+        # "json/fpas_1k_10.json", f"json/{name}_1k_10.json"
     ] if not l_f else l_f
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    for a in range(0, 2):
-        lim = 10**(a+4)
+    lf = len(l_f)//2
+    fig, ax = plt.subplots(1, lf, figsize=(10, 5))
+    for a in range(0, lf): # for each subplot
+        lim = 10**(a+4)    # still manual, up to <1mn
         y1, y2 = load_json(l_f[a*2]), load_json(l_f[(a*2)+1])
         ln = max(len(y1), len(y2))
         lm = min(len(y1[0]), len(y2[0]))
-        x = [(i+1)*np.floor(lim/1000) for i in range(ln)]
+        mul = np.floor(lim/1000) if lim >= 1000 else np.floor(lim)
+        x = [(i+1)*mul for i in range(ln)]
         _plt(x, y1, alpha, 'b', "passive", ax[a])
         _plt(x, y2, alpha, 'r', "active", ax[a])
-        ax[a].set_title(f"Comparison ({10**(a+1)}k)")
-        ax[a].set_xlabel("Token count (thousands)")
+        txt = f"Comparison ({lim/1000})k" if lim >= 1000 else \
+              f"Comparison ({lim})k"
+        ax[a].set_title(txt)
+        txt = "Token count"
+        txt = txt+" (thousands)" if lim >= 1000 else txt
+        ax[a].set_xlabel(txt)
         ax[a].set_ylabel(f"Accuracy score ({lm})")
         ax[a].legend()
     fig.tight_layout()
@@ -297,5 +302,6 @@ if __name__ == "__main__":
     if ('func' in kwargs) and kwargs['func'] != None:
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
+    plot_all([], 0.95, "tok")
     # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
-    plot_all([], 0.95, "pos")
+    sys.exit()
