@@ -230,23 +230,26 @@ def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
 def plot_all(l_f=[], alpha=0.95, name="alt"):
     """Plots a graph with both learning curves."""
     l_f = [
-        "json/passive_10k_10.json", f"json/{name}_10k_10.json",
-        "json/passive_100k_10.json", f"json/{name}_100k_10.json",
-        # "json/fpas_1k_10.json", f"json/{name}_1k_10.json"
-    ] if not l_f else l_f
+        "json/pas_10k_10.json", f"json/orc_10k_10.json",
+        "json/pas_10k_10.json", f"json/act_10k_10.json"
+    ] if not l_f else l_f # json files to plot, by pairs
+    l_tmp = [
+        "passive", "oracle",
+        "passive", "active"
+    ] # custom labels
     lf = len(l_f)//2
     fig, ax = plt.subplots(1, lf, figsize=(10, 5))
     for a in range(0, lf): # for each subplot
-        lim = 10**(a+4)    # still manual, up to <1mn
-        y1, y2 = load_json(l_f[a*2]), load_json(l_f[(a*2)+1])
-        ln = max(len(y1), len(y2))
-        lm = min(len(y1[0]), len(y2[0]))
+        lim = 10000          # temporary
+        # lim = 10**(a+4)    # still manual, up to 1mn
+        y1, y2 = load_json(l_f[a*2]), load_json(l_f[(a*2)+1]) # y-axes
+        ln, lm = max(len(y1), len(y2)), min(len(y1[0]), len(y2[0]))
         mul = np.floor(lim/1000) if lim >= 1000 else np.floor(lim)
-        x = [(i+1)*mul for i in range(ln)]
-        _plt(x, y1, alpha, 'b', "passive", ax[a])
-        _plt(x, y2, alpha, 'r', "active", ax[a])
-        txt = f"Comparison ({lim/1000})k" if lim >= 1000 else \
-              f"Comparison ({lim})k"
+        x = [(i+1)*mul for i in range(ln)]                    # x-axis
+        _plt(x, y1, alpha, 'b', l_tmp[a*2], ax[a])
+        _plt(x, y2, alpha, 'r', l_tmp[(a*2)+1], ax[a])
+        txt = f"Comparison ({int(lim/1000)}k)" if lim >= 1000 else \
+              f"Comparison ({lim})"
         ax[a].set_title(txt)
         txt = "Token count"
         txt = txt+" (thousands)" if lim >= 1000 else txt
@@ -302,6 +305,8 @@ if __name__ == "__main__":
     if ('func' in kwargs) and kwargs['func'] != None:
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
-    plot_all([], 0.95, "tok")
+    plot_all([], 0.95, "act")
     # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
+    # gen = _load_gen()
+    # gen.optimize()
     sys.exit()

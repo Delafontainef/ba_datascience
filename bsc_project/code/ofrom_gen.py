@@ -15,7 +15,7 @@ Gen methods:
 
 Strategies:
 - _pick_rand:    selects a file at random
-- _pick_conf:    selects the file with the lowest confidence score
+- _pick_file:    selects the file with the lowest confidence score
 |- _pred_files:  sets the average confidence scores for that selection
 - _pick_tok:     selects the file based on a set of tokens
 |- _pred_tokens: sets those tokens and their average confidence scores
@@ -35,7 +35,8 @@ Note: CRF methods are imported from 'ofrom_crf.py'.
       This script should contain no scikit-learn operation directly.
 """
 
-from ofrom_crf import train, predict_one, acc_score, add_ft, rem_ft
+from ofrom_crf import train, predict_one, acc_score, Featurer
+from scipy.stats import entropy
 import pandas as pd
 import numpy as np
 import os, re, time, json, joblib
@@ -95,7 +96,7 @@ class Gen:
     For iteration, that list is popped each time a file is selected.
     """
     
-    def __init__(self, f="", s=0, lim=-1, keep=[], mt=1., mf=0., mc=1.):
+    def __init__(self, f="", s=0, lim=-1, keep=[], mt=1., mf=0., mc=0.):
             # operations
         self.keep = ['ADV', 'CON', 'DET', 'PRO', 'PRP'] if not keep else keep
             # data
@@ -103,18 +104,19 @@ class Gen:
         self.load_dataset(f, s, lim)        # fills the above
         self._ind = [i for i in range(len(self.files))] # file selection
         self.s = 0                          # subset size in tokens
-        self.crf = None                     # CRF model
-        self.acc = -1.                      # model accuracy
+        self.crf, self.acc = None, -1.      # CRF model and accuracy
         self.prf = []                       # prediction for active learning
+        self.tok = {}                       # attempt at diversity...
         self.mt, self.mf, self.mc = mt, mf, mc # weights for formula
+        self.c1, self.c2 = 0.0127, 0.023
             # features
-        self.tok = None                     # positional features
-        self.cont = ['p1', 'p2', 'p3', 's1', 's2', 's3']
+        self.Ft = Featurer(pos=self.pos)
         
         # Private methods #
         #-----------------#
-    def _wrap(func, l_res, i, args):
-        """Wraps around a function, puts result in shared list."""
+    def _wrap(self, func, l_res, i, args):
+        """Wraps around a function, puts result in shared list.
+           (Never used.)"""
         l_res[i] = func(*args)
     def _ch_pos(self, tok):
         """Checks a token's state (non-problematic, grammatical)."""
@@ -187,53 +189,104 @@ class Gen:
         self.table = pd.DataFrame(self.table) # turn to DataFrame
         self._files_weight()
         return self.files, self.table, self.pos, self.ref
-    def _iter_all(self):
+    def _iter_tok(self):
         """Iterates over the entire dataset."""
         for nx, ny in self.files:
             for i, sx in enumerate(nx):
-                for j, dw in enumerate(sx):
-                    yield nx, i, j, dw, ny[i][j]
-    def _iter_tok(self, nx):
-        """Iterates over tokens."""
-        c = 0
-        for s in nx:
-            for w in s:
-                w = w['token']
-                yield c, w
-                c += 1
-    def _pred_files(self): ## ACTIVE LEARNING STRATEGY
-        """Fills 'self.prf' for '_pick_conf'."""
+                for j, dt in enumerate(sx):
+                    yield nx, i, j, dt, ny[i][j]
+    def _iter_dw(self, nx):
+        """Iterates over dicts."""
+        for i, sequ in enumerate(nx):
+            for j, dw in enumerate(sequ):
+                w = dw['token']
+                yield i, j, w, dw
+    def _iter_pred(self, y_tpl, ch_cutoff=True, x=[]):
+        """Iterates over dicts."""
+        for i, s in enumerate(y_tpl):
+            for j, d in enumerate(s):
+                yp, yc, yd = d['pos'], d['confidence'], d['dict']
+                if ch_cutoff and yc >= self.acc:
+                    continue
+                if x:
+                    yield x[i][j]['token'], yp, yc, yd
+                else:
+                    yield yp, yc, yd
+    def _avg(self, y_tpl, ch_cutoff=True):
+        """Calculates an average (of confidence scores)."""
+        y_cnf = []
+        for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=ch_cutoff):
+            y_cnf.append(yc)
+        return np.mean(y_cnf) if len(y_cnf) > 0 else 0.
+    def _macro_avg(self, y_tpl, ch_cutoff=True):
+        """Calculates a macro average (of confidence scores)."""
+        d_cnf = {}
+        for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=ch_cutoff):
+            if yp not in d_cnf:
+                d_cnf[yp] = []
+            d_cnf[yp].append(yc)
+        avg = [np.mean(cnf) for cnf in d_cnf.values()]
+        return np.mean(avg) if avg else 0.
+    def _entropy(self, y_tpl, ch_cutoff=False):
+        """Calculates the entropy (of confidence scores)."""
+        y_cnf = []
+        for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=False):
+            probs = np.array(list(yd.values()))
+            y_cnf.append(entropy(probs, base=2))
+        return np.mean(y_cnf) if len(y_cnf) > 0 else 0.
+    def _pred_dvrs(self, favg=None): ## ACTIVE LEARNING STRATEGY
+        """Fills 'self.prf' for '_pick_dvrs'."""
+        favg = self._avg if not favg else favg
+        self.prf = [0. for i in self._ind]
+        for a, i in enumerate(self._ind):          # for each file index...
+            x_te, y_te = self.files[i]             # file content
+            _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
+            dvrs, tot = 0, 0                       # try diversity...
+            for w, yp, yc in self._iter_pred(y_tpl, True, x_te):
+                ch_new = False; tot += 1
+                if w not in self.tok:
+                    self.tok[w] = {'#tot':0}; ch_new = True
+                if yp not in self.tok[w]:
+                    self.tok[w][yp] = 0; ch_new = True
+                self.tok[w][yp] += 1
+                self.tok[w]['#tot'] += 1
+                lw = len(self.tok[w])
+                if (ch_new or (lw > 1 and
+                    self.tok[w][yp]/self.tok[w]['#tot'] < 1/lw)):
+                    dvrs += 1
+            wf = dvrs/tot                          # file weight (utility)
+            wt = favg(y_tpl, ch_cutoff=True)       # token weight
+            self.prf[a] = (1-wt)+wf                # formula
+    def _pred_oracle(self, favg=None):
+        """Fills 'self.prf' for '_pick_file'."""
+        self.prf = [0. for i in self._ind]
+        for a, i in enumerate(self._ind):          # for each file index...
+            x_te, y_te = self.files[i]             # file content
+            acc, y_tpl = self.pred(x_te, y_te)     # prediction
+            self.prf[a] = (1-acc)                  # formula
+    def _pred_files(self, favg=None): ## ACTIVE LEARNING STRATEGY
+        """Fills 'self.prf' for '_pick_file'."""
+        favg = self._avg if not favg else favg
         self.prf = [0. for i in self._ind]
         for a, i in enumerate(self._ind):          # for each file index...
             row = self.table.iloc[i]
             wf, cf = row['#weight'], row['#cost']  # file metadata
             x_te, y_te = self.files[i]             # file content
-            _, y_tmp = self.pred(x_te, y_te, ch_acc=False) # confidence scores
-            # y_cnf = []
-            # for j, w in self._iter_tok(x_te):      # check pos/acc
-                # ch_non, ch_pos = self._ch_pos(w)
-                # if (not ch_pos) or (y_tmp[j] >= self.acc):
-                    # continue
-                # y_cnf.append(y_tmp[j])
-            y_cnf = [yi for yi in y_tmp if yi < self.acc] # cutoff point
-            wt = np.mean(y_cnf) if len(y_cnf) > 1 else 0. # token weight
+            _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
+            wt = favg(y_tpl, ch_cutoff=True)       # token weight
             cf = 1. if (cf*self.mc) <= 1e-6 else (cf*self.mc) # avoid zero
-            w = (((1-wt)*self.mt)+(wf*self.mf))*cf # formula
+            w = (((1-wt)*self.mt)+(wf*self.mf))/cf # formula
             self.prf[a] = w                        # store
     def _pred_tokens(self, x_te=[], y_te=[]): ## ACTIVE LEARNING STRATEGY
         """Fills 'self.prf' for '_pick_toks'."""
         if not x_te:                                # if not subset...
             x_te, y_te = self.ref                   # reference dataset
         conf, self.prf = {}, {}
-        for s in x_te:
-            y_tpl = predict_one(self.crf, s)        # labels
-            for a, w in enumerate(s):
-                w = w['token']
-                if y_tpl[a]['confidence'] >= self.acc: # cutoff point
-                    continue                        ## (note: self.pos?)
-                if w not in conf:
-                    conf[w] = []
-                conf[w].append(y_tpl[a]['confidence'])
+        _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
+        for w, yp, yc in self._iter_pred(y_tpl, ch_cutoff=True, x=x_te):
+            if w not in conf:
+                conf[w] = []
+            conf[w].append(y_tpl[a]['confidence'])
         for w, l_cnf in conf.items():               # average all
             conf[w] = np.log10(len(l_cnf))*(1-np.mean(l_cnf))
         for a in range(10):                         # hardcoded nb_tokens
@@ -245,7 +298,7 @@ class Gen:
         deb1, deb2 = -1, 0
         for i, file in enumerate(self.files):       # count occurrences
             deb1 += 1; deb2 = 0
-            for j, w in self._iter_tok(file[0]):
+            for i, j, w, dw in self._iter_dw(file[0]):
                 if w not in d_add:
                     d_add[w] = [0 for i in range(len(self.files))]
                 d_add[w][i] += 1
@@ -258,7 +311,7 @@ class Gen:
         return self._by_files(f, s, lim) if f else ([], None, None)
     def load_parsed(self, f="ofrom_gen.joblib"):
         """Loads the pre-parsed data."""
-        self.files, self.table, self.pos = joblib.load(f); self.reset()
+        self.files, self.table, self.pos = joblib.load(f)
         return self.files, self.table, self.pos
     def save(self, f="ofrom_gen.joblib"):
         """Saves parsed data as a '.joblib' file."""
@@ -308,48 +361,31 @@ class Gen:
         self._files_weight()
         if wf:
             self.save(wf)
-    def add_ft(self):
-        """How about some madness?"""
-        def _cot(x, i, w, p, ft, tok):
-            """Positional code for 'self._ft()'."""
-            pw = x[i][p]['token']
-            if pw in tok[w][ft]:               # already in
-                tok[w][ft][pw] += 1
-            elif len(tok[w][ft]) < 100:        # limited space
-                tok[w][ft][pw] = 1
-            return tok
-        
-        tok = {}   # features
-        d_ind = {}; mid = len(self.cont)//2
-        for x, i, j, dw, pos in self._iter_all():   # for each token
-            w = dw['token']
-            if w not in tok:                        # add to table
-                tok[w] = {k:{} for k in self.cont}
-            for b in range(mid):                    # left cotext
-                p, ft = j-(b+1), self.cont[b]
-                if p < 0:
-                    continue
-                tok = _cot(x, i, w, p, ft, tok)
-            for b in range(mid):                    # right cotext
-                p, ft = j+(b+1), self.cont[mid+b]
-                if p >= len(x[i]):
-                    continue
-                tok = _cot(x, i, w, p, ft, tok)
-        for w in tok:
-            for k in self.cont:
-                while len(tok[w][k]) > 10:
-                    mw = min(tok[w][k], key=tok[w][k].get)
-                    tok[w][k].pop(mw)
-        for x, i, j, dw, y in self._iter_all():
-            x[i][j] = add_ft(dw, x, i, j, w, tok, pos=self.pos,
-                             idx="token", cont=self.cont)
-    def rem_ft(self):
-        """Remove all features but 'token'."""
-        for i, tpl in enumerate(self.files):
-            self.files[i][0] = rem_ft(tpl[0], ['token'])
+    def get_dataset(self):
+        """Returns the entire dataset."""
+        X, y = [], []
+        for nx, ny in self.files:
+            X = X+nx; y = y+ny
+        return X, y
     
         # Training #
         #----------#
+    def add_ft(self):
+        """Add features to the dataset."""
+        X, y = self.get_dataset()
+        self.Ft.reset(); self.Ft.prepare(X, y)
+        for i, tpl in enumerate(self.files):
+            nx, ny = self.Ft.set(*tpl, ch_prep=False)
+            self.files[i][0] = nx
+        self.Ft.reset()
+        self.c1, self.c2 = 0.231, 0.0004    # hyperparameters
+        print("Featured.", end=" "*40+"\r")
+    def rem_ft(self):
+        """Remove all features but 'token'."""
+        for i, tpl in enumerate(self.files):
+            nx,_ = self.Ft.rem(*tpl)
+            self.files[i][0] = nx
+        self.c1, self.c2 = 0.0127, 0.023    # hyperparameters
     def tr(self, X, y):
         """Only updates the crf."""
         self.crf = train(X, y); return self.crf
@@ -357,42 +393,36 @@ class Gen:
         """Generates an accuracy score."""
         y_tpl = [predict_one(self.crf, s) for s in X] \
                 if not y_pr else y_pr
-        y_ate, y_apr, y_cnf = [], [], []
+        y_ate, y_apr = [], []
         for a in range(len(y)):                     # for each sequence...
             for b in range(len(y[a])):              # for each token...
                 y_ate.append(y[a][b])               # actual PoS
                 y_apr.append(y_tpl[a][b]['pos'])    # predicted PoS
-                y_cnf.append(y_tpl[a][b]['confidence']) # confidence score
         acc = acc_score(y_ate, y_apr) if ch_acc else -1.
-        return acc, y_cnf
+        return acc, y_tpl
     def train(self, X, y):
         """Returns an accuracy score."""
         self.tr(X, y)
         return self.pred(*self.ref)
+    def train_all(self):
+        """Trains a CRF on the complete dataset."""
+        return self.tr(*self.get_dataset())
     def optimize(self, lim=100000):
         """First batch is random, next by active learning strategy."""
         from ofrom_crf import test_crf
         self.reset()
-        X, y = self.select(self._pick_rand, lim=lim)
-        test_crf(X, y)
+        test_crf(*self.ref)
     
         # 'File' selection #
         #------------------#
-    def reset(self, l_toks=[]):
-        """Resets the selection list. Gets a reference subset.
-           Hardcoded to 100,000 tokens."""
-        # if len(self.files) > 50000: # FAKE code
-            # self.files = self.files[:500001]
-        # self.add_ft()
-        # print("Featured.", end=" "*40+"\r")
-        self._ind = [i for i in range(len(self.files))]
-        x, y = self.select(self._pick_rand, lim=100000)
-        self.ref, self.s = [x, y], 0
+    def _pick_last(self):
+        """Picks last."""
+        v = self._ind.pop(); return v
     def _pick_rand(self):
         """Picks at random."""
         a = np.random.randint(0, len(self._ind))
         v = self._ind.pop(a); return v
-    def _pick_conf(self):
+    def _pick_file(self):
         """Picks based on file confidence.
            Assumes 'self.crf' is set."""
         gi, gw = -1, -1.                    # global index/weight
@@ -415,23 +445,35 @@ class Gen:
                 ga, gw = a, lw
         v = self._ind.pop(ga)
         return v
+    def reset(self, l_toks=[]):
+        """Resets the selection list. Gets a reference subset.
+           Hardcoded to 100,000 tokens."""
+        # if len(self.files) > 50000:                    # FAKE code
+            # self.files = self.files[:500001]
+        # self.add_ft()                                  # features
+        self._ind = [i for i in range(len(self.files))]
+        self.s = 0
+        n, m = self.select(self._pick_last, lim=1800000) # remove lots
+        x, y = self.select(self._pick_last, lim=100000)  # reference dataset
+        self.ref, self.s, self.tok = [x, y], 0, {}
     def select(self, strat=None, X=[], y=[], lim=10000):
         """Generic 'file' selection function. User can define the strategy.
            Defaults to random."""
         nw, strat = 0, self.pick_rand if strat == None else strat
-        if strat == self._pick_conf:
-            self._pred_files()
+        if strat == self._pick_file:
+            self._pred_oracle(favg=self._macro_avg) # strategy type
         elif strat == self._pick_toks:
             self._pred_tokens()
         old_s = self.s
         while True:
             if (not self._ind) or (lim > 0 and self.s//lim > old_s//lim):
-                return X, y                     # break
-            a = strat()
-            nx, ny = self.files[a]
-            for s in nx:
+                break
+            a = strat()                         # file index
+            nx, ny = self.files[a]              # file content
+            for s in nx:                        # file size
                 self.s += len(s)
-            X = X+nx; y = y+ny
+            X = X+nx; y = y+ny                  # add to subset
+        return X, y
     
         # Iterators #
         #-----------#
@@ -453,103 +495,11 @@ class Gen:
     def iter_active(self, lim=10000, **kwargs):
         """First batch is random, next by active learning strategy."""
         self.reset()
-        X, y, acc = self.it([], [], lim, self._pick_rand)
+        X, y, acc = self.it([], [], lim, self._pick_last)
         yield acc
         while self._ind:
-            X, y, acc = self.it(X, y, lim, self._pick_conf) # self._pick_toks)
+            X, y, acc = self.it(X, y, lim, self._pick_file) # self._pick_toks)
             yield acc
-
-    # Simulation #
-    #------------#
-class Sim:
-    """Simulates data to test 'Gen'."""
-    def __init__(self):
-        self.fixed = {
-            'a':'A', 'b':'A',
-            'c':'B', 'd':'B',
-            'e':'C', 'f':'C',
-            'g':'D', 'h':'D',
-            'i':'A', 'j':'B'
-        }
-        self.voc = list(self.fixed.keys())
-        self.dat = []
-        
-        # Tokens #
-        #--------#
-    def pos_dep(self, w, pos):
-        """Predictable data by position."""
-        if w in ['a', 'b'] and pos == 0:
-            return 'A'
-        elif w in ['c', 'd'] and pos == 1:
-            return 'B'
-        elif w in ['e', 'f'] and pos == 2:
-            return 'C'
-        elif w in ['g', 'h'] and pos == 3:
-            return 'D'
-        elif w in ['i', 'j'] and pos == 4:
-            return 'A'
-        else:
-            return self.fixed[w]
-    def unpred(self):
-        """Unpredictable label."""
-        return np.random.choice(['A', 'B', 'C', 'D'], p=[.35, .25, .25, .15])
-    
-        # Structures #
-        #------------#
-    def sequ(self, typ="simple"):
-        """Generates a fake sequence."""
-        l_w, l_p = [np.random.choice(self.voc) for _ in range(5)], []
-        for i, w in enumerate(l_w):
-            r = np.random.random()
-            if typ == "simple":
-                if r < 0.15:
-                    l = self.pos_dep(w, i)
-                else:
-                    l = self.fixed[w]
-            elif r < 0.7:
-                l = self.fixed[w]
-            elif r < 0.85:
-                l = self.pos_dep(w, i)
-            else:
-                l = self.unpred()
-            l_p.append(l)
-        return l_w, l_p
-    def file(self, n_sequ=200, typ="simple"):
-        """Generates a fake file."""
-        r = np.random.randint(200, 2801)
-        f, c = [[], []], 0
-        for a in range(n_sequ):
-            l_w, l_p = self.sequ(typ)
-            f[0].append(l_w); f[1].append(l_w); c = c+5
-        return f, c
-    def data(self):
-        """Generates a fake dataset."""
-        self.dat, gn = [], 0
-        while gn < 2000000:
-            n_sequ = np.random.randint(200, 800)
-            typ = "simple" if np.random.random() <= 0.7 else "complex"
-            file, c = self.file(n_sequ, typ)
-            self.dat.append(file); gn += c
-        return self.dat
-        
-        # joblib #
-        #--------#
-    def tobase(self, wf="alt.joblib"):
-        """Save as joblib file."""
-        l_dat = []
-        for a, file in enumerate(self.dat):
-            fname = f"a{a}"
-            for b, sequ in enumerate(file[0]):
-                for c, w in enumerate(sequ):
-                    l_dat.append(
-                        {'file':fname, 'speaker':'spk', 'start':0., 'end':0.,
-                         'token':w, 'pos':file[1][b][c]}
-                    )
-            l_dat.append(
-                {'file':fname, 'speaker':'spk', 'start':0., 'end':10.,
-                 'token':'_', 'pos':file[1][b][c]}
-            )
-        joblib.dump(l_dat, wf, compress=5)
 
 if __name__ == "__main__":
     sim = Sim(); sim.data(); sim.tobase()
