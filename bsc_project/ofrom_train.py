@@ -1,30 +1,26 @@
-""" 29.05.2025
-Simulates passive/active training.
+""" 03.06.2025
+Simulates active learning.
 
 Supports command calls:
     python test.py function [args/kwargs]
 With supported functions:
-- 'plot': Plots the accuracy based on a pre-saved json file.
-          ('plot_acc' function)
-- 'passive': Tests conventional (passive) training.
-             ('save_passive' function)
-- 'active': Tests active training.
-            The strategy is hardcoded in the 'Gen' class.
-            ('save_active' function)
+- 'exp': runs the experiment ('it' times). 
 The list of parameters (args/kwargs) is in the '_args' function,
 along with their default values.
             
-When testing, we:
-- increment 'loop' times an initially empty subset 
-  by batches of 'lim' tokens
-- train it and get an accuracy score
-- select the next batch:
-|- passive) at random,
-|- active)  by file with lowest average confidence score
-- we repeat that process 'it' times and save the accuracy each time 
-  in file 'f'.
+An experiment is:
+- selecting a reference dataset (fixed or random: 'fixed' parameter).
+- selecting an initial subset (fixed or random: 'fixed' parameter).
+- repeating a loop 'loop' times:
+|- train the model on the subset
+|- evaluate the model on the reference dataset
+|- select more data for the subset
+|-- at random (passive learning)
+|-- with a query strategy (active learning) 
+The set of accuracy scores is saved in a file ('f' parameter).
+See 'ofrom_gen.py' for the strategies.
 
-When plotting, we load the saved accuracy and plot its average plus CI.
+The 'plot' function loads the saved accuracies and plots with CIs.
 
 Note: Anything about scikit-learn should be in 'ofrom_crf.py'.
       Anything about the data itself should be in 'ofrom_gen.py'.
@@ -40,7 +36,6 @@ from ofrom_gen import Gen
 from scipy.stats import t as sci_t
 import numpy as np
 import matplotlib.pyplot as plt
-import multiprocessing as mp
 
     # Support #
     #---------#
@@ -86,68 +81,6 @@ def _plt_ci(y, xm, alpha, title, ch_graph=True):
     plt.savefig(title)
     return x, my, cuy, cdy
 
-def _wrap(fun, lv, i, *args):
-    """Wraps around a function for multi-threading/processing."""
-    lv[i] = fun(*args)[0]
-def _prc(target, kwargs):
-    """Multiprocessing for 'save_x' functions."""
-    start, mid, k_f, it = time.time(), 0., mp.Lock(), kwargs['it']
-    kwargs['lock'] = k_f
-    verbose = kwargs['verbose']
-    kwargs['verbose'] = False; kwargs['ch_graph'] = False
-    kwargs['it'] = 1
-    l_prc = [None for i in range(it)]
-    for i in range(it):
-        l_prc[i] = mp.Process(target=target, kwargs=kwargs)
-        l_prc[i].start(); mid = time.time()-start-mid
-        prt(f"Starting: iteration {i+1}/{it}: {mid:.02f}s", verbose)
-    for i, prc in enumerate(l_prc):
-        mid = time.time()-start-mid
-        prt(f"Waiting on {i}/{it}: {mid:0.2f}s", verbose)
-        prc.join()
-    prt(f"Finished: {time.time()-start:.02f}s", verbose)
-def _load_gen(verbose=True, **kwargs):
-    """Load an instance of 'Gen' and loads the pre-parsed data."""
-    start = time.time()
-    gen = Gen(f=""); gen.load_parsed("code/ofrom_gen.joblib")
-    prt(f"Parsed: {time.time()-start:.02f}s", verbose)
-    return gen
-def _loop(strat, lim, loop, verbose, ch_graph, title):
-    """Common code for passive/active."""
-    c, y, xm = 0, [], np.floor(lim/1000)
-    start = time.time()
-    prt("Starting loops...", verbose)
-    for acc_score in strat(lim):
-        y.append(acc_score); c += 1
-        prt(f"\tloop {c}/{loop}: {time.time()-start:.02f}s", verbose)
-        start = time.time()
-        if loop > 0 and c >= loop:
-            break
-    if ch_graph:
-        x = [i*xm for i in range(len(y))]
-        plt.title(title)
-        plt.xlabel("Token count (thousands)")
-        plt.ylabel("Accuracy score")
-        plt.plot(x, y)
-        plt.show()
-    return y
-def _sloop(strat, lim, it, loop, verbose, ch_graph, alpha, f, lock, title):
-    """Common code for save_passive/active."""
-    start = time.time()
-    gen = _load_gen(verbose)
-    for a in range(it):
-        acc = strat(gen, lim, loop, verbose, False)
-        prt(f"Save {a+1}/{it}: {time.time()-start:.02f}s., {gen.s} tokens", 
-            verbose)
-        if lock:    # parallel processing
-            with lock:
-                save_acc(f, acc)
-        else:       # single use
-            save_acc(f, acc)
-    if ch_graph:
-        acc = load_acc(f)
-        _plt_ci(acc, np.floor(lim/1000), alpha, title)
-
     # Json #
     #------#
 def load_json(f):
@@ -156,7 +89,7 @@ def load_json(f):
         return []
     with open(f, 'r', encoding="utf-8") as rf:
         return json.load(rf)
-def save_acc(f, acc):
+def save_json(f, acc):
     """Stores the accuracy (list<float>) in a file."""
     if not os.path.isfile(f):   # new
         o_acc = [[a] for a in acc]
@@ -166,99 +99,120 @@ def save_acc(f, acc):
             o_acc[a].append(acc[a])
     with open(f, 'w', encoding="utf-8") as wf:
         json.dump(o_acc, wf)
-def save_all(f, data):
-    """Saves accuracy/tokens in a file.
-       dict<'acc': list<float>, 
-            'tok': dict<str: list<float>>
-       >."""
-    if not os.path.isfile(f):   # new
-        o_data = {
-            'acc': [[a] for a in data['acc']],
-            'tok': data['tok']
-        }
-    else:
-        o_data = load_json(f)
-        for a in range(len(data['acc'])):
-            o_data['acc'][a].append(data['acc'][a])
-        for tn, tl in data['tok'].items():
-            for a in range(len(tl)):
-                o_data['tok'][tn][a].append(tl[a])
-    with open(f, 'w', encoding="utf-8") as wf:
-        json.dump(o_acc, wf)
 
-    # Passive training #
-    #------------------#
-def passive(gen, lim=10000, loop=10, verbose=True, ch_graph=True):
-    """Plots a single iterated passive training."""
-    return _loop(gen.iter_passive, lim, loop, verbose, 
-                 ch_graph, "Passive accuracy")
-def save_passive(lim=10000, it=10, loop=10, verbose=True, ch_graph=False, 
-                 alpha=0.95, f="passive_acc.json", lock=None, **kwargs):
-    """Saves a repeated passive training at each iteration.
-       'loop' < 0 exhausts all data."""
-    _sloop(passive, lim, it, loop, verbose, ch_graph, alpha, f, lock,
-           "Passive training")
-def prc_passive(**kwargs):
-    """Multiprocessing over 'save_passive'."""
-    _prc(save_passive, kwargs)
+    # Training #
+    #----------#
+def load_gen(**kwargs):
+    """Load an instance of 'Gen' with pre-parsed data."""
+    start = time.time()
+    path = kwargs.get('gen_path', 'code/ofrom_gen.joblib')
+    verbose = kwargs.get('verbose', True)
+    gen = Gen(f=""); gen.load_parsed(path)
+    prt(f"Parsed: {time.time()-start:.02f}s", verbose)
+    return gen
+def loop(gen, c_it=-1, **kwargs):
+    """Minimal (select-train-evaluate) loop function."""
+    loop, l_acc, c, start = kwargs.get('loop', 10), [], 0, time.time()
+    verbose = kwargs.get('verbose', True)
+    for acc_score in gen.iter(**kwargs):            # loop
+        l_acc.append(acc_score); c += 1             # append accuracy score
+        txt = (f"loop {c}/{loop}: {time.time()-start:.02f}s"+
+               f", {gen.s} tokens")
+        txt = "\t"+txt if c_it < 0 else f"\tit {c_it}/{kwargs['it']} "+txt
+        prt(txt, verbose)                           # print
+        start = time.time()
+        if loop > 0 and c >= loop:                  # check if done
+            break
+    return l_acc
+def experiment(**kwargs):
+    """Code to run one replication."""
+    gen, it = load_gen(**kwargs), kwargs.get('it', 10)
+    f = kwargs.get('f', "")                         # json file path
+    for c in range(it):
+        gen.reset(**kwargs)
+        l_acc = loop(gen, c_it=c+1, **kwargs)
+        save_json(f, l_acc)
+def oracle(**kwargs):
+    """For a fixed reference dataset, finds the most accurate subset."""
+        # unpack
+    lim, features = kwargs.get('lim', 100000), kwargs.get('features', False)
+    f, loop = kwargs.get('f', "oracle_ind.json"), kwargs.get('loop', 10)
+    verbose, fixed = kwargs.get('verbose', True), kwargs.get('fixed', True)
+        # generate
+    gen = load_gen(**kwargs)
+    jd = {'acc':[], 'ind':[], 'len':[]}             # json in-flight data
+    old_s, l_acc, llim = gen.s, [], lim//loop
+    for acc, l_ind in gen.oracle(lim, features, fixed, verbose):
+        if gen.s//llim > old_s//llim:               # add to accuracy
+            old_s = gen.s; l_acc.append(acc)
+        jd['acc'].append(acc); jd['len'].append(gen.s); jd['ind'] = l_ind
+        with open("oracle.json", 'w', encoding="utf-8") as wf: # overwrite
+            json.dump(jd, wf)
+    while len(l_acc) < loop:                        # ensure last loop.s
+        l_acc.append(acc)
+    save_json(f, l_acc)
+    
+def plot(l_master, wf="img/summary.png", alpha=0.95, fixed_y=False):
+    """Code to plot the jsons."""
+    nr = len(l_master); nc = min(3, nr); nr = int(np.ceil(nr/nc))
+    fig, axes = plt.subplots(nr, nc, figsize=(4*nc, 4*nr), squeeze=False)
+    axes = axes.flatten()
+    colors = ['b', 'r', 'k', 'g', 'c', 'm', 'y']
+    yrows = {r: [float('inf'), float('-inf')] for r in range(nr)}
+    for i, ax in enumerate(axes):
+        if i >= len(l_master):                  # unused
+            ax.axis('off'); continue
+        l_f, l_lgd, lim = l_master[i]           # unpack
+        ch_k = True if lim >= 1000 else False
+        mul = np.floor(lim/1000) if ch_k else np.floor(lim)
+        ln, lm, l_y = -1, np.inf, []
+        for j, f in enumerate(l_f):
+            y = load_json(f); l_y.append(y)
+            ln = len(y) if len(y) > ln else ln
+            lm = min(lm, len(y[0]))
+        x = [(i+1)*mul for i in range(ln)]      # x-axis
+        r =  i//nc                              # row index
+        for j, y in enumerate(l_y):             # plot each line
+            _plt(x, y, alpha, colors[j], l_lgd[j], ax)
+            if fixed_y:                         # track y-axis scale
+                y_min, y_max = yrows[r]
+                yrows[r] = [min(y_min, np.min(y)), max(y_max, np.max(y))]
+        txt = f"Comparison ({int(lim/1000)}k)" if ch_k else \
+              f"Comparison ({lim})"
+        ax.set_title(txt)
+        txt = "Token count"
+        txt = txt+" (thousands)" if ch_k else txt
+        ax.set_xlabel(txt)
+        ax.set_ylabel(f"Accuracy score ({lm})")
+        ax.legend()
+    if fixed_y:                                 # set y-axis scale
+        for i, axi in enumerate(axes[:len(l_master)]):
+            r = i//nc
+            y_min, y_max = yrows[r]
+            axi.set_ylim(y_min, y_max)
+    fig.tight_layout()
+    plt.savefig(wf)
 
-    # Active training #
-    #-----------------#
-def active(gen, lim=10000, loop=10, verbose=True, ch_graph=True):
-    """Plots a single (variable tokens) active training."""
-    return _loop(gen.iter_active, lim, loop, verbose,
-                 ch_graph, "Active accuracy")
-def save_active(lim=10000, it=10, loop=10, alpha=0.95, verbose=True, 
-                ch_graph=True, f="active_acc.json", lock=None, **kwargs):
-    """Saves a repeated active (variable) training at each iteration.
-       'loop' < 0 exhausts all data."""
-    _sloop(active, lim, it, loop, verbose, ch_graph, alpha, f, lock,
-           "Active training")
-def prc_active(**kwargs):
-    """Multiprocessing over 'save_active_v'."""
-    _prc(save_active, kwargs)
-
-    # Main #
-    #------#
+    # Others #
+    #--------#
 def regen(rf="code/ofrom_alt.joblib", wf="code/ofrom_gen.joblib"):
     """Rebuilds the data used by Gen."""
-    gen = Gen(); gen.load_dataset("code/ofrom_alt.joblib")
-    gen.save("code/ofrom_gen.joblib")
-def plot_acc(f, lim=10000, alpha=0.95, title="Training", **kwargs):
-    """Plot the accuracy after it has been generated/saved."""
-    return _plt_ci(load_json(f), np.floor(lim/1000), alpha, title)
-def plot_all(l_f=[], alpha=0.95, name="alt"):
-    """Plots a graph with both learning curves."""
-    l_f = [
-        "json/pas_10k_10.json", f"json/orc_10k_10.json",
-        "json/pas_10k_10.json", f"json/act_10k_10.json"
-    ] if not l_f else l_f # json files to plot, by pairs
-    l_tmp = [
-        "passive", "oracle",
-        "passive", "active"
-    ] # custom labels
-    lf = len(l_f)//2
-    fig, ax = plt.subplots(1, lf, figsize=(10, 5))
-    for a in range(0, lf): # for each subplot
-        lim = 10000          # temporary
-        # lim = 10**(a+4)    # still manual, up to 1mn
-        y1, y2 = load_json(l_f[a*2]), load_json(l_f[(a*2)+1]) # y-axes
-        ln, lm = max(len(y1), len(y2)), min(len(y1[0]), len(y2[0]))
-        mul = np.floor(lim/1000) if lim >= 1000 else np.floor(lim)
-        x = [(i+1)*mul for i in range(ln)]                    # x-axis
-        _plt(x, y1, alpha, 'b', l_tmp[a*2], ax[a])
-        _plt(x, y2, alpha, 'r', l_tmp[(a*2)+1], ax[a])
-        txt = f"Comparison ({int(lim/1000)}k)" if lim >= 1000 else \
-              f"Comparison ({lim})"
-        ax[a].set_title(txt)
-        txt = "Token count"
-        txt = txt+" (thousands)" if lim >= 1000 else txt
-        ax[a].set_xlabel(txt)
-        ax[a].set_ylabel(f"Accuracy score ({lm})")
-        ax[a].legend()
-    fig.tight_layout()
-    plt.savefig("img/summary.png")
-    
+    gen = Gen(); gen.load_dataset(rf); gen.save(wf)
+def decompose(rf="code/ofrom_gen.joblib", wf="code/fake.joblib",
+              nb_toks=5, lim=200000):
+    """Makes 1 file per sequence, for a 'lim' dataset (-1 for all).
+       'nb_toks' is the max tokens per sequence (-1 for all)."""
+    gen = Gen(); gen.load_dataset(rf); gen.decompose(wf, nb_toks, lim)
+def optimize(**kwargs):
+    """Defines c1/c2 hyperparameters."""
+    rf = kwargs.get('gen_path', 'code/ofrom_gen.joblib')
+    lim, features = kwargs.get('lim', 100000), kwargs.get('features', False)
+    verbose = kwargs.get('verbose', True)
+    gen = Gen(); gen.load_parsed(rf)
+    if features:
+        gen.add_ft()
+    return gen.optimize(lim, verbose)
+
 def _typ(v):
     """Converts type the old way."""
     d_typ = {'None': None, 'True': True, 'true':True,
@@ -275,28 +229,27 @@ def _typ(v):
         v = json.loads(v)
     except json.JSONDecodeError:        # string
         return v
-def _args(args):
+def _args(args=[]):
     """Updates default parameters using sys.argv."""
     d_func = {
-        'plot': plot_acc,
-        'passive': save_passive,
-        'active': save_active
+        'exp': experiment,
+        'oracle': oracle
     }
-    l_args = ['func', 'lim', 'it', 'loop', 'alpha', 
-              'verbose', 'ch_graph', 
-              'f', 'title'] # key list
     d_args = {
-        'func': None,
+        'func': None, 'strat': "file_conf",
         'lim': 1000, 'it': 10, 'loop': 100, 'alpha': 0.95, 
         'verbose': True, 'ch_graph': False,
-        'f': "passive_acc.json", "title": "Training"
+        'f': "passive_acc.json", 'title': "Training",
+        'avg': "avg", 'features': False, 'data_size': -1,
+        'fixed': False, 'ref_size': 100000
     }                   # default values
+    k_args = list(d_args.keys())
     for a, arg in enumerate(args):
         if "=" in arg:  # kwarg
             k, v = arg.split("=",1)
             d_args[k] = _typ(v.replace("\"", "").replace("'", ""))
         else:           # arg
-            d_args[l_args[a]] = _typ(arg)
+            d_args[k_args[a]] = _typ(arg)
     if isinstance(d_args['func'], str):
         d_args['func'] = d_func.get(d_args['func'], None)
     return d_args
@@ -305,8 +258,13 @@ if __name__ == "__main__":
     if ('func' in kwargs) and kwargs['func'] != None:
         kwargs['func'](**kwargs)    # explicit function call
         sys.exit()
-    plot_all([], 0.95, "act")
-    # regen("code/ofrom_alt.joblib", "code/ofrom_gen.joblib")
-    # gen = _load_gen()
-    # gen.optimize()
+        # default function
+    l_master = [
+        [
+            ["paslim_10k_10.json", "actlim_10k_10.json"], 
+            ["passive", "active"], 
+            10000
+        ]
+    ]
+    plot(l_master)
     sys.exit()
