@@ -43,7 +43,7 @@ def prt(txt, verbose=True):
     """Overwrites current line."""
     if verbose:
         print("\r"+" "*100+"\r"+txt, end="")
-def _plt(x, y, alpha=0.95, color="b", label="", ax=None):
+def _plt(x, y, alpha=0.95, color="b", label="", opac=1., ax=None):
     """Plots a graph with a CI."""
     my, cuy, cdy = [], [], []
     for el in y:                    # manual build of mean +/- var
@@ -54,9 +54,11 @@ def _plt(x, y, alpha=0.95, color="b", label="", ax=None):
         cuy.append(v_el[1])
         cdy.append(v_el[0])
     if ax:
-        ax.plot(x, my, color=color, linewidth=2, label=label)
-        ax.plot(x, cuy, linestyle='--', color=color, linewidth=1)
-        ax.plot(x, cdy, linestyle='--', color=color, linewidth=1)
+        ax.plot(x, my, color=color, linewidth=2, alpha=opac, label=label)
+        ax.plot(x, cuy, linestyle='--', color=color, 
+                alpha=opac-0.5, linewidth=1)
+        ax.plot(x, cdy, linestyle='--', color=color, 
+                alpha=opac-0.5, linewidth=1)
     return x, my, cuy, cdy
 def _plt_ci(y, xm, alpha, title, ch_graph=True):
     """Plots CI functions."""
@@ -129,21 +131,20 @@ def experiment(**kwargs):
     gen, it = load_gen(**kwargs), kwargs.get('it', 10)
     f = kwargs.get('f', "")                         # json file path
     for c in range(it):
-        gen.reset(**kwargs)
         l_acc = loop(gen, c_it=c+1, **kwargs)
         save_json(f, l_acc)
 def oracle(**kwargs):
     """For a fixed reference dataset, finds the most accurate subset."""
         # unpack
-    lim, features = kwargs.get('lim', 100000), kwargs.get('features', False)
+    lim, features = kwargs.get('lim', 10000), kwargs.get('features', False)
     f, loop = kwargs.get('f', "oracle_ind.json"), kwargs.get('loop', 10)
     verbose, fixed = kwargs.get('verbose', True), kwargs.get('fixed', True)
         # generate
     gen = load_gen(**kwargs)
     jd = {'acc':[], 'ind':[], 'len':[]}             # json in-flight data
-    old_s, l_acc, llim = gen.s, [], lim//loop
-    for acc, l_ind in gen.oracle(lim, features, fixed, verbose):
-        if gen.s//llim > old_s//llim:               # add to accuracy
+    old_s, l_acc = gen.s, []
+    for acc, l_ind in gen.oracle(lim*loop, features, fixed, verbose):
+        if gen.s//lim > old_s//lim:               # add to accuracy
             old_s = gen.s; l_acc.append(acc)
         jd['acc'].append(acc); jd['len'].append(gen.s); jd['ind'] = l_ind
         with open("oracle.json", 'w', encoding="utf-8") as wf: # overwrite
@@ -151,18 +152,20 @@ def oracle(**kwargs):
     while len(l_acc) < loop:                        # ensure last loop.s
         l_acc.append(acc)
     save_json(f, l_acc)
-    
-def plot(l_master, wf="img/summary.png", alpha=0.95, fixed_y=False):
+
+    # Others #
+    #--------#
+def plot(l_master, wf="img/summary.png", alpha=0.95, row=3, fixed_y=False):
     """Code to plot the jsons."""
-    nr = len(l_master); nc = min(3, nr); nr = int(np.ceil(nr/nc))
+    nr = len(l_master); nc = min(row, nr); nr = int(np.ceil(nr/nc))
     fig, axes = plt.subplots(nr, nc, figsize=(4*nc, 4*nr), squeeze=False)
     axes = axes.flatten()
-    colors = ['b', 'r', 'k', 'g', 'c', 'm', 'y']
+    colors = ['b', 'r', 'g', 'k', 'c', 'm', 'y']
     yrows = {r: [float('inf'), float('-inf')] for r in range(nr)}
     for i, ax in enumerate(axes):
         if i >= len(l_master):                  # unused
             ax.axis('off'); continue
-        l_f, l_lgd, lim = l_master[i]           # unpack
+        l_f, l_lgd, title, lim = l_master[i]    # unpack
         ch_k = True if lim >= 1000 else False
         mul = np.floor(lim/1000) if ch_k else np.floor(lim)
         ln, lm, l_y = -1, np.inf, []
@@ -172,13 +175,16 @@ def plot(l_master, wf="img/summary.png", alpha=0.95, fixed_y=False):
             lm = min(lm, len(y[0]))
         x = [(i+1)*mul for i in range(ln)]      # x-axis
         r =  i//nc                              # row index
+        opac = 1.
         for j, y in enumerate(l_y):             # plot each line
-            _plt(x, y, alpha, colors[j], l_lgd[j], ax)
+            _plt(x, y, alpha, colors[j], l_lgd[j], opac, ax)
+            opac = opac-0.2
             if fixed_y:                         # track y-axis scale
                 y_min, y_max = yrows[r]
                 yrows[r] = [min(y_min, np.min(y)), max(y_max, np.max(y))]
         txt = f"Comparison ({int(lim/1000)}k)" if ch_k else \
               f"Comparison ({lim})"
+        txt = title if title else txt
         ax.set_title(txt)
         txt = "Token count"
         txt = txt+" (thousands)" if ch_k else txt
@@ -192,17 +198,14 @@ def plot(l_master, wf="img/summary.png", alpha=0.95, fixed_y=False):
             axi.set_ylim(y_min, y_max)
     fig.tight_layout()
     plt.savefig(wf)
-
-    # Others #
-    #--------#
 def regen(rf="code/ofrom_alt.joblib", wf="code/ofrom_gen.joblib"):
     """Rebuilds the data used by Gen."""
     gen = Gen(); gen.load_dataset(rf); gen.save(wf)
 def decompose(rf="code/ofrom_gen.joblib", wf="code/fake.joblib",
-              nb_toks=5, lim=200000):
+              nb_toks=5, lim=-1):
     """Makes 1 file per sequence, for a 'lim' dataset (-1 for all).
        'nb_toks' is the max tokens per sequence (-1 for all)."""
-    gen = Gen(); gen.load_dataset(rf); gen.decompose(wf, nb_toks, lim)
+    gen = Gen(); gen.load_parsed(rf); gen.decompose(wf, nb_toks, lim)
 def optimize(**kwargs):
     """Defines c1/c2 hyperparameters."""
     rf = kwargs.get('gen_path', 'code/ofrom_gen.joblib')
@@ -237,7 +240,7 @@ def _args(args=[]):
     }
     d_args = {
         'func': None, 'strat': "file_conf",
-        'lim': 1000, 'it': 10, 'loop': 100, 'alpha': 0.95, 
+        'lim': 10000, 'it': 10, 'loop': 10, 'alpha': 0.95, 
         'verbose': True, 'ch_graph': False,
         'f': "passive_acc.json", 'title': "Training",
         'avg': "avg", 'features': False, 'data_size': -1,
@@ -261,9 +264,16 @@ if __name__ == "__main__":
         # default function
     l_master = [
         [
-            ["paslim_10k_10.json", "actlim_10k_10.json"], 
-            ["passive", "active"], 
-            10000
+            ["json/rndfixft_10k_10.json", "json/cnffixft_10k_10.json",
+             "json/orcfixft_10k_10.json"], 
+            ["random", "confidence", "oracle"], 
+            "Comparison - featured", 10000
+        ],
+        [
+            ["json/rndfixft_100k_10.json", "json/cnffixft_100k_10.json",
+             "json/orcfixft_100k_10.json"], 
+            ["random", "confidence", "oracle"], 
+            "Comparison - featured", 100000
         ]
     ]
     plot(l_master)

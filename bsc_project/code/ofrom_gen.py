@@ -20,7 +20,7 @@ The strategies (for file selection) are:
 - "last":         always the last file
 - "100":          from index 100 onward
 - "file_conf":    average confidence score over the entire file's content
-- "file_dvrs":    adds proportion of "new" tokens to file_conf
+- "file_dvrs":    adds proportion of tokens to file_conf
 - "file_orcl":    file's accuracy score ("oracle" strategy)
 More modifiers:
 - "features":     whether to add features to the CRF model ('add_ft()')
@@ -46,9 +46,10 @@ Note: CRF methods are imported from 'ofrom_crf.py'.
 
 from ofrom_crf import train, predict_one, acc_score, Featurer
 from scipy.stats import entropy
+from collections import Counter
 import pandas as pd
 import numpy as np
-import os, re, time, json, joblib
+import os, re, time, json, heapq, joblib
 
     # From 'ofrom_pos.py' #
     #---------------------#
@@ -109,116 +110,69 @@ class Gen:
             # operations
         self.keep = ['ADV', 'CON', 'DET', 'PRO', 'PRP'] if not keep else keep
             # data
-        self.files, self.table, self.pos, self.ref = [], {}, {}, []
+        self.files, self.ref = [], []
         self.load_dataset(f, s, lim)        # fills the above
         self._ind = [i for i in range(len(self.files))] # file selection
         self.s = 0                          # subset size in tokens
         self.crf, self.acc = None, -1.      # CRF model and accuracy
         self.prf = []                       # prediction for active learning
-        self.tok = {}                       # attempt at diversity...
-        self.c1, self.c2 = 0.0127, 0.023
+        self.tok = {}                       # for diversity
+        self.c1, self.c2 = 0.0127, 0.023    # hyperparameters
         self.strat = {
             "rand": (self._pick_rand, None),
             "last": (self._pick_last, None),
             "100": (self._pick_100, None),
             "toks": (self._pick_toks, self._pred_tokens),
-            "file_conf": (self._pick_file, self._pred_files),
-            "file_dvrs": (self._pick_file, self._pred_dvrs),
-            "file_orcl": (self._pick_file, self._pred_oracle)
-        }
+            "conf": (self._pick_file, self._pred_files),
+            "dvrs": (self._pick_file, self._pred_dvrs)
+        }                                   # strategies
         self.d_avg = {
             "avg": self._avg,
             "macro": self._macro_avg,
-            "entropy": self._entropy
-        }
+            "entropy": self._entropy,
+            "oracle": self._oracle
+        }                                   # averages (includes oracle)
             # features
-        self.Ft = Featurer(pos=self.pos)
+        self.Ft = Featurer()                # to add/remove model features
         
         # Private methods #
         #-----------------#
-    def _ch_pos(self, tok):
-        """Checks a token's state (non-problematic, grammatical)."""
-        set_pos = self.pos[tok]
-        ch_non, ch_pos = False, False
-        if len(set_pos) == 1:
-            ch_non = True
-        for pos in set_pos:
-            pos = pos.split(":", 1)[0] if ":" in pos else pos
-            if pos in self.keep:
-                ch_pos = True; break
-        return ch_non, ch_pos
-    def _files_weight(self):
-        """Calculates the file weight/cost."""
-            # Rework the global token dictionary
-        conf = {}
-        for tok, set_pos in self.pos.items():
-            ch_non, ch_pos = self._ch_pos(tok)
-            conf[tok] = (ch_non, ch_pos)
-            # Set file weights
-        minc, maxc = np.inf, 0
-        for i, row in self.table.iterrows(): # for each file...
-            w, c, tot = 0., 0, 0
-            for tok, count in row.items():   # for token type...
-                if "#" in tok:
-                    continue
-                ch_non, ch_pos = conf[tok]; tot += count
-                if not ch_non:  # only problematic tokens corrected
-                    c += count
-                if ch_pos:      # focus on selected 'PoS'
-                    w += count
-            tot = 1 if tot == 0 else tot
-            self.table.at[i, '#weight'] = w/tot
-            self.table.at[i, '#cost'] = c
-            minc = c if c < minc else minc
-            maxc = c if c > maxc else maxc
-        self.table = self.table[['#file', '#weight', '#cost']]
-        self.table['#cost'] = self.table['#cost'].astype(float)
-        for i, row in self.table.iterrows(): # standardize cost
-            c = self.table.at[i, '#cost']
-            div = 1 if (maxc-minc) == 0 else (maxc-minc)
-            self.table.at[i, '#cost'] = (c-minc)/(maxc-minc)
-        self.table['#cost'] = self.table['#cost'].clip(1e-6) # avoid 0.
+    def _iter_tok(self):
+        """Iterates over the entire dataset."""
+        for i, tpl in enumerate(self.files):
+            nx, ny = self.files[i]
+            for j, sx in enumerate(nx):
+                for k, dt in enumerate(sx):
+                    yield i, nx, j, k, dt, ny[j][k]
+    def _make_table(self):
+        """From self.files, fills a table (dictionary, not Pandas)."""
+        self.table = {}
+        for i, nx, j, k, dt, pos in self._iter_tok():
+            tok = dt['token']+"_"+pos
+            if i not in self.table:             # file to table
+                self.table[i] = {'count':0, 'hist':{}}
+            self.table[i]['count'] += 1         # file's token count
+            if tok not in self.table[i]['hist']:# token_pos to histogram
+                self.table[i]['hist'][tok] = 0
+            self.table[i]['hist'][tok] += 1
+        return self.table
     def _by_files(self, f, s, lim):
         """Organizes the dataset by files.
            Fills the words data."""
-        self.files, self.pos, self.ref, on = [], {}, [], ""
-        self.table = {'#file':[], '#weight':[], '#cost':[]}
+        self.files, on = [], ""
         if not os.path.isfile(f):       # no file to load
-            return self.files, self.table, self.pos, self.ref
+            return self.files
         for sequ in iter_sequ(f, s, lim):
             n = sequ[0]['file']         # current 'file'
             if on != n:                 # new 'file'
                 self.files.append([[],[]]); on = n
                 print(n, end=" "*40+"\r")
-                for col in self.table:
-                    self.table[col].append(0)
-                self.table['#file'][-1] = n
-                self.table['#weight'][-1] = None
             for i, d in enumerate(sequ):# for each word...
                 x, y = d['token'], d['pos']
-                if x not in self.pos:   # add to global
-                    self.pos[x] = set()
-                    self.table[x] = [0 for i in 
-                                     range(len(self.table['#file']))]
-                self.pos[x].add(y)
-                self.table[x][-1] += 1
             x, y = prep_sequ(sequ)
             self.files[-1][0].append(x); self.files[-1][1].append(y)
-        self.table = pd.DataFrame(self.table) # turn to DataFrame
-        self._files_weight()
-        return self.files, self.table, self.pos, self.ref
-    def _iter_tok(self):
-        """Iterates over the entire dataset."""
-        for nx, ny in self.files:
-            for i, sx in enumerate(nx):
-                for j, dt in enumerate(sx):
-                    yield nx, i, j, dt, ny[i][j]
-    def _iter_dw(self, nx):
-        """Iterates over dicts."""
-        for i, sequ in enumerate(nx):
-            for j, dw in enumerate(sequ):
-                w = dw['token']
-                yield i, j, w, dw
+        self._make_table()
+        return self.files
     def _iter_pred(self, y_tpl, ch_cutoff=True, x=[]):
         """Iterates over dicts."""
         for i, s in enumerate(y_tpl):
@@ -230,13 +184,13 @@ class Gen:
                     yield x[i][j]['token'], yp, yc, yd
                 else:
                     yield yp, yc, yd
-    def _avg(self, y_tpl, ch_cutoff=True):
+    def _avg(self, acc, y_tpl, ch_cutoff=True):
         """Calculates an average (of confidence scores)."""
         y_cnf = []
         for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=ch_cutoff):
             y_cnf.append(yc)
         return np.mean(y_cnf) if len(y_cnf) > 0 else 0.
-    def _macro_avg(self, y_tpl, ch_cutoff=True):
+    def _macro_avg(self, acc, y_tpl, ch_cutoff=True):
         """Calculates a macro average (of confidence scores)."""
         d_cnf = {}
         for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=ch_cutoff):
@@ -245,80 +199,67 @@ class Gen:
             d_cnf[yp].append(yc)
         avg = [np.mean(cnf) for cnf in d_cnf.values()]
         return np.mean(avg) if avg else 0.
-    def _entropy(self, y_tpl, ch_cutoff=False):
+    def _entropy(self, acc, y_tpl, ch_cutoff=False):
         """Calculates the entropy (of confidence scores)."""
         y_cnf = []
         for yp, yc, yd in self._iter_pred(y_tpl, ch_cutoff=False):
             probs = np.array(list(yd.values()))
             y_cnf.append(entropy(probs, base=2))
         return np.mean(y_cnf) if len(y_cnf) > 0 else 0.
+    def _oracle(self, acc, y_tpl, ch_cutoff=False):
+        """Returns the accuracy."""
+        return acc
+    def _sparse_cosine(self, h1, h2):
+        """Computes similarity between token histograms."""
+        shrd = set(h1) & set(h2)
+        dot = sum(h1[k]*h2[k] for k in shrd)
+        nh1 = sum(c**2 for c in h1.values())**0.5
+        nh2 = sum(c**2 for c in h2.values())**0.5
+        return dot/((nh1*nh2) + 1e-6)
+    def _max_sparse(self, hist, list_hist):
+        """Returns the redundancy score."""
+        if not list_hist:
+            return 0.
+        return max(self._sparse_cosine(hist, h) for s, h in list_hist)
     def _pred_dvrs(self, favg=None): ## ACTIVE LEARNING STRATEGY
         """Fills 'self.prf' for '_pick_dvrs'."""
         favg = self._avg if not favg else favg
         self.prf = [0. for i in self._ind]
         for a, i in enumerate(self._ind):          # for each file index...
             x_te, y_te = self.files[i]             # file content
-            _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
-            dvrs, tot = 0, 0                       # try diversity...
-            for w, yp, yc in self._iter_pred(y_tpl, True, x_te):
-                ch_new = False; tot += 1
-                if w not in self.tok:
-                    self.tok[w] = {'#tot':0}; ch_new = True
-                if yp not in self.tok[w]:
-                    self.tok[w][yp] = 0; ch_new = True
-                self.tok[w][yp] += 1
-                self.tok[w]['#tot'] += 1
-                lw = len(self.tok[w])
-                if (ch_new or (lw > 1 and
-                    self.tok[w][yp]/self.tok[w]['#tot'] < 1/lw)):
-                    dvrs += 1
-            wf = dvrs/tot                          # file weight (utility)
-            wt = favg(y_tpl, ch_cutoff=True)       # token weight
-            self.prf[a] = (1-wt)+wf                # formula
-    def _pred_oracle(self, favg=None):
-        """Fills 'self.prf' for '_pick_file'."""
-        self.prf = [0. for i in self._ind]
-        for a, i in enumerate(self._ind):          # for each file index...
-            x_te, y_te = self.files[i]             # file content
-            acc, y_tpl = self.pred(x_te, y_te)     # prediction
-            self.prf[a] = (1-acc)                  # formula
+            acc, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
+            htok, tot = self.table[i]['hist'], self.table[i]['count']
+            htok = {k: v/tot for k, v in htok.items()}
+            gtot = sum(self.tok.values())
+            ghtok = {k: v/gtot for k, v in self.tok.items()}
+            wf = self._sparse_cosine(htok, ghtok)  # redundancy
+            wt = favg(acc, y_tpl, ch_cutoff=True)  # token weight
+            self.prf[a] = (1-wt)+(1-wf)            # formula
     def _pred_files(self, favg=None): ## ACTIVE LEARNING STRATEGY
         """Fills 'self.prf' for '_pick_file'."""
         favg = self._avg if not favg else favg
         self.prf = [0. for i in self._ind]
         for a, i in enumerate(self._ind):          # for each file index...
-            row = self.table.iloc[i]
-            wf, cf = row['#weight'], row['#cost']  # file metadata
             x_te, y_te = self.files[i]             # file content
-            _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
-            wt = favg(y_tpl, ch_cutoff=True)       # token weight
-            self.prf[a] = (1-wt) # /cf             # formula
+            acc, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
+            wt = favg(acc, y_tpl, ch_cutoff=True)  # token weight
+            self.prf[a] = (1-wt)                   # formula
     def _pred_tokens(self, x_te=[], y_te=[], favg=None): ## ACT.LEARN. STRATEGY
         """Fills 'self.prf' for '_pick_toks'."""
         if not x_te:                                # if not subset...
             x_te, y_te = self.ref                   # reference dataset
         conf, self.prf = {}, {}
         _, y_tpl = self.pred(x_te, y_te, ch_acc=False) # prediction
-        for w, yp, yc in self._iter_pred(y_tpl, ch_cutoff=True, x=x_te):
-            if w not in conf:
-                conf[w] = []
+        for t, yp, yc in self._iter_pred(y_tpl, ch_cutoff=True, x=x_te):
+            t = t+"_"+yp 
+            if t not in conf:
+                conf[t] = []
             conf[w].append(y_tpl[a]['confidence'])
         for w, l_cnf in conf.items():               # average all
             conf[w] = np.log10(len(l_cnf))*(1-np.mean(l_cnf))
         for a in range(10):                         # hardcoded nb_tokens
             w = max(conf, key=conf.get)
             self.prf[w] = conf.pop(w)
-        if len(self.table.columns.values) > 5:      # table has tokens
-            return
-        d_add = {}
-        deb1, deb2 = -1, 0
-        for i, file in enumerate(self.files):       # count occurrences
-            deb1 += 1; deb2 = 0
-            for i, j, w, dw in self._iter_dw(file[0]):
-                if w not in d_add:
-                    d_add[w] = [0 for i in range(len(self.files))]
-                d_add[w][i] += 1
-        self.table = pd.concat([self.table, pd.DataFrame(d_add)], axis=1)
     
         # Data #
         #------#
@@ -327,11 +268,15 @@ class Gen:
         return self._by_files(f, s, lim) if f else ([], None, None)
     def load_parsed(self, f="ofrom_gen.joblib"):
         """Loads the pre-parsed data."""
-        self.files, self.table, self.pos = joblib.load(f)
-        return self.files, self.table, self.pos
+        tpl = joblib.load(f)
+        if isinstance(tpl, tuple):
+            self.files, self.table = tpl[0], tpl[1]
+        else:
+            self.files = tpl; self._make_table()
+        return self.files
     def save(self, f="ofrom_gen.joblib"):
         """Saves parsed data as a '.joblib' file."""
-        joblib.dump((self.files, self.table, self.pos), f, compress=5)
+        joblib.dump((self.files, self.table), f, compress=5)
     def count(self, files=[]):
         """Returns the number of tokens."""
         n_file, n_sequ, n_tok = 0, 0, 0
@@ -343,20 +288,14 @@ class Gen:
                 for w in sequ:
                     n_tok += 1
         return n_file, n_sequ, n_tok
-    def decompose(self, wf="", nb_toks=5, lim=200000):
+    def decompose(self, wf="", nb_toks=5, lim=-1):
         """Make as many files as there are sequences.
            Cut the sequences into units of max 'nb_toks' tokens."""
-        def _tofile(files, table, s, l):
-            files.append([[s], [l]])
-            for k in table:
-                table[k].append(0)
-            return files, table
-        
-        files, table = [], {k:[] for k in self.table}
-        c = 0
-        for i in range(len(self.files)):        # for each file...
+        files = []
+        c, lf = 0, len(self.files)
+        for i in range(lf):        # for each file...
             x, y = self.files[i]
-            print(self.table.at[i, '#file'], end=" "*40+"\r")
+            print(f"{i+1}/{lf}", end=" "*40+"\r")
             for a, sequ in enumerate(x):        # for each sequence...
                 lsequ = y[a]
                 c += len(sequ)
@@ -364,19 +303,15 @@ class Gen:
                     while len(sequ) > nb_toks:      # max nb_toks tokens
                         s, sequ = sequ[:nb_toks], sequ[nb_toks:]
                         l, lsequ = lsequ[:nb_toks], lsequ[nb_toks:]
-                        files, table = _tofile(files, table, s, l)
+                        files.append([[s], [l]])
                 if len(sequ) > 0:
-                    files, table = _tofile(files, table, sequ, lsequ)
+                    files.append([[sequ], [lsequ]])
                 if lim > 0 and c >= lim:        # enough tokens
                     break
             if lim > 0 and c >= lim:
                 break
-        for i in table['#file']:
-            table['#file'][i] = f"f{i}"
-            table['#weight'][i] = None
         self.files = files
-        self.table = pd.DataFrame(table)
-        self._files_weight()
+        self._make_table()
         if wf:
             self.save(wf)
     def get_dataset(self):
@@ -413,11 +348,11 @@ class Gen:
            Assumes 'self.crf' is set."""
         ga, gw = -1, -1.
         for a, i in enumerate(self._ind):   # for each file...
-            lw, row = [], self.table.iloc[i]
-            cf = row['#cost']
+            lw, fh = [], self.table[i]['hist']
             for w in self.prf:              # nb_occ * avg_conf_score
-                lw.append(row[w]*self.prf[w])
-            lw = np.mean(lw) # / cf         # average
+                n = fh[w] if w in fh else 0
+                lw.append(n*self.prf[w])
+            lw = np.mean(lw)                # average
             if lw > gw:
                 ga, gw = a, lw
         v = self._ind.pop(ga)
@@ -427,13 +362,23 @@ class Gen:
         self._ind = [i for i in range(len(self.files))]
         if lim > 0: # remove the given amount
             nf, ns, nt = self.count()
-            self.select("last", lim=(nt-lim))
+            if (nt-lim) > nt/2:
+                l_tmp, gs = [], 0
+                for i, tpl in enumerate(self.files):
+                    for s in tpl[0]:
+                        gs += len(s)
+                    l_tmp.append(i)
+                    if gs >= lim:
+                        break
+                self._ind = l_tmp
+            else:
+                self.select("last", lim=(nt-lim))
         self.s = 0
     def set_ref(self, lim=100000, fixed=False):
         """Selects the reference dataset."""
         strat = "rand" if not fixed else "100"
         x, y = self.select(strat, lim=lim)
-        self.ref = [x, y]
+        self.ref, self.s = [x, y], 0
     def reset(self, data_size=-1, ref_size=100000, 
               fixed=False, features=False, **kwargs):
         """Resets the selection list. Gets a (100k) reference subset."""
@@ -441,7 +386,7 @@ class Gen:
             self.add_ft()                               # features
         self.set_size(data_size)                        # available data
         self.set_ref(ref_size, fixed)                   # reference dataset
-        self.s, self.tok = 0, {}
+        self.tok = {}
     def select(self, strat="rand", X=[], y=[], lim=10000, avg="avg"):
         """Generic 'file' selection function. User can define the strategy.
            Defaults to random."""
@@ -454,8 +399,12 @@ class Gen:
                 break
             a = strat()                         # file index
             nx, ny = self.files[a]              # file content
-            for s in nx:                        # file size
-                self.s += len(s)
+            tot, hist = self.table[a]['count'], self.table[a]['hist']
+            self.s += tot                       # data size
+            for tok, tc in hist.items():        # data histogram
+                if tok not in self.tok:
+                    self.tok[tok] = 0
+                self.tok[tok] += 1
             X = X+nx; y = y+ny                  # add to subset
         return X, y
     
@@ -479,7 +428,7 @@ class Gen:
         self.c1, self.c2 = 0.0127, 0.023    # hyperparameters
     def tr(self, X, y):
         """Only updates the crf."""
-        self.crf = train(X, y); return self.crf
+        self.crf = train(X, y, self.c1, self.c2); return self.crf
     def pred(self, X, y, y_pr=None, ch_acc=True):
         """Generates an accuracy score."""
         y_tpl = [predict_one(self.crf, s) for s in X] \
